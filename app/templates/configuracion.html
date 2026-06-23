@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configuración — Panel RFID</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-brand">
+    <span class="brand-mark">RFID</span>
+    <div class="brand-text">
+      <h1>Plataforma de trazabilidad RFID</h1>
+      <span class="brand-sub">Configuración</span>
+    </div>
+  </div>
+  <nav class="topbar-nav">
+    <a href="/" class="nav-link">Panel en vivo</a>
+    <a href="/informes" class="nav-link">Informes</a>
+    <a href="/configuracion" class="nav-link active">Configuración</a>
+  </nav>
+</header>
+
+<main class="layout">
+
+  <section class="db-status-banner" id="db-status-banner">
+    Verificando conexión a SQL Server...
+  </section>
+
+  <!-- Pestañas -->
+  <div class="tabs-bar">
+    <button class="tab-btn active" data-tab="readers">Readers y antenas</button>
+    <button class="tab-btn" data-tab="sistema">Sistema</button>
+  </div>
+
+  <!-- ── PESTAÑA: Readers ─────────────────────────────────────────── -->
+  <div class="tab-content active" id="tab-readers">
+    <div class="config-header">
+      <div>
+        <h2>Readers configurados</h2>
+        <span class="eventos-sub">Agregar, editar o quitar readers y sus antenas</span>
+      </div>
+      <button class="btn-primary" id="btn-nuevo-reader">+ Nuevo reader</button>
+    </div>
+    <section id="readers-config-list" class="readers-config-list">
+      <!-- se llena dinámicamente por configuracion.js -->
+    </section>
+  </div>
+
+  <!-- ── PESTAÑA: Sistema ─────────────────────────────────────────── -->
+  <div class="tab-content" id="tab-sistema">
+    <div class="config-header">
+      <div>
+        <h2>Configuración del sistema</h2>
+        <span class="eventos-sub">Parámetros de conexión a base de datos y comportamiento de la plataforma</span>
+      </div>
+    </div>
+
+    <div class="sistema-save-banner hidden" id="sistema-save-banner">
+      ✓ Configuración guardada en disco. <strong>Reiniciá la aplicación</strong> para que los cambios tomen efecto.
+    </div>
+
+    <form id="form-sistema">
+
+      <!-- Grupo: Conexión SQL Server -->
+      <div class="config-group">
+        <h3 class="config-group-title">Conexión a SQL Server</h3>
+
+        <div class="config-field">
+          <label class="config-label">
+            Driver ODBC
+            <span class="tooltip-icon" data-tip="Nombre exacto del driver ODBC instalado en el servidor. Ejecutá 'python diagnostico_sql.py' para ver los drivers disponibles en este equipo.">?</span>
+          </label>
+          <input type="text" id="cfg-db-driver" name="DB_DRIVER" class="config-input"
+                 placeholder="ODBC Driver 17 for SQL Server">
+        </div>
+
+        <div class="config-field">
+          <label class="config-label">
+            Servidor
+            <span class="tooltip-icon" data-tip="Nombre o IP del servidor SQL Server. Para instancias con nombre, usar el formato SERVIDOR\INSTANCIA (ej: GEN01\SQL o localhost\SQLEXPRESS).">?</span>
+          </label>
+          <input type="text" id="cfg-db-server" name="DB_SERVER" class="config-input"
+                 placeholder="localhost\SQLEXPRESS">
+        </div>
+
+        <div class="config-field">
+          <label class="config-label">
+            Base de datos
+            <span class="tooltip-icon" data-tip="Nombre de la base de datos donde se ejecutó el script schema.sql.">?</span>
+          </label>
+          <input type="text" id="cfg-db-database" name="DB_DATABASE" class="config-input"
+                 placeholder="RFID_FPT">
+        </div>
+
+        <div class="config-field">
+          <label class="config-label">
+            Autenticación
+            <span class="tooltip-icon" data-tip="'Windows' usa la sesión del usuario que ejecuta la app (recomendado en dominios). 'SQL Server' requiere usuario y contraseña específicos de SQL Server.">?</span>
+          </label>
+          <select id="cfg-auth-type" class="config-input">
+            <option value="true">Windows (Trusted Connection)</option>
+            <option value="false">SQL Server (usuario/contraseña)</option>
+          </select>
+        </div>
+
+        <div id="cfg-sqlauth-fields">
+          <div class="config-field">
+            <label class="config-label">
+              Usuario SQL
+              <span class="tooltip-icon" data-tip="Usuario de SQL Server. Solo se usa si la autenticación es 'SQL Server'.">?</span>
+            </label>
+            <input type="text" id="cfg-db-username" name="DB_USERNAME" class="config-input"
+                   placeholder="sa">
+          </div>
+
+          <div class="config-field">
+            <label class="config-label">
+              Contraseña SQL
+              <span class="tooltip-icon" data-tip="Contraseña del usuario SQL Server. Si dejás el campo con '••••••', no se modifica la contraseña guardada actualmente.">?</span>
+            </label>
+            <input type="password" id="cfg-db-password" name="DB_PASSWORD" class="config-input"
+                   placeholder="(sin cambios)">
+          </div>
+        </div>
+
+        <div class="config-field">
+          <label class="config-label config-label-check">
+            <input type="checkbox" id="cfg-db-encrypt" name="DB_ENCRYPT">
+            <span>Cifrar conexión (Encrypt)</span>
+            <span class="tooltip-icon" data-tip="Activa el cifrado TLS/SSL de la conexión con SQL Server. Necesario si el servidor lo exige (común en entornos cloud como Azure SQL).">?</span>
+          </label>
+        </div>
+
+        <div class="config-field">
+          <label class="config-label config-label-check">
+            <input type="checkbox" id="cfg-db-trust-cert" name="DB_TRUST_SERVER_CERTIFICATE">
+            <span>Confiar en certificado del servidor</span>
+            <span class="tooltip-icon" data-tip="Omite la validación del certificado SSL del servidor. Recomendado en instalaciones locales con certificados autofirmados. Desactivar en entornos productivos con certificados válidos.">?</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Grupo: Buffer de escritura -->
+      <div class="config-group">
+        <h3 class="config-group-title">Buffer de escritura en base de datos</h3>
+
+        <div class="config-field">
+          <label class="config-label">
+            Intervalo de flush (segundos)
+            <span class="tooltip-icon" data-tip="Cada cuántos segundos se insertan las lecturas acumuladas en SQL Server. Valores menores dan mayor inmediatez en la base de datos, pero generan más carga de escritura. Rango recomendado: 1 a 10 segundos.">?</span>
+          </label>
+          <input type="number" id="cfg-flush-seg" name="INTERVALO_FLUSH_SEGUNDOS"
+                 class="config-input config-input-sm" min="0.5" step="0.5" value="2">
+        </div>
+
+        <div class="config-field">
+          <label class="config-label">
+            Tamaño máximo del buffer (lecturas)
+            <span class="tooltip-icon" data-tip="Cantidad máxima de lecturas que se retienen en memoria si la base de datos no está disponible temporalmente. Al superar este límite se descartan las lecturas más antiguas. Aumentar si se prevén cortes prolongados de conexión a la BD.">?</span>
+          </label>
+          <input type="number" id="cfg-buffer-max" name="TAMANO_MAXIMO_BUFFER"
+                 class="config-input config-input-sm" min="1000" step="1000" value="50000">
+        </div>
+      </div>
+
+      <!-- Grupo: Recarga de readers -->
+      <div class="config-group">
+        <h3 class="config-group-title">Actualización dinámica de readers</h3>
+
+        <div class="config-field">
+          <label class="config-label">
+            Intervalo de recarga de configuración (segundos)
+            <span class="tooltip-icon" data-tip="Cada cuántos segundos la plataforma consulta la base de datos para detectar readers nuevos o dados de baja desde el panel web. Los cambios también se aplican inmediatamente al guardar desde la pestaña 'Readers y antenas'.">?</span>
+          </label>
+          <input type="number" id="cfg-recarga-seg" name="INTERVALO_RECARGA_CONFIG_SEGUNDOS"
+                 class="config-input config-input-sm" min="5" step="5" value="30">
+        </div>
+      </div>
+
+      <!-- Grupo: LLRP -->
+      <div class="config-group">
+        <h3 class="config-group-title">Parámetros LLRP por defecto</h3>
+        <p class="config-group-desc">Valores usados si un reader no especifica sus propios parámetros. Se aplican al conectar con cada reader.</p>
+
+        <div class="config-field">
+          <label class="config-label">
+            Sesión Gen2 por defecto
+            <span class="tooltip-icon" data-tip="Sesión del protocolo EPC Gen2 que usa el reader durante el inventario. La sesión 2 es la más común para portales con múltiples lectores: evita que un reader lea tags que ya fueron inventariados por otro en la misma área. Valores: 0-3.">?</span>
+          </label>
+          <select id="cfg-session" name="SESSION_DEFAULT" class="config-input config-input-sm">
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+          </select>
+        </div>
+
+        <div class="config-field">
+          <label class="config-label">
+            Población estimada de tags
+            <span class="tooltip-icon" data-tip="Estimación de cuántos tags pueden estar simultáneamente en el campo de lectura. El reader usa este valor para calibrar el algoritmo de anticosión (Q). Para portales con tránsito de 1-2 pallets a la vez, valores de 4 a 8 son adecuados.">?</span>
+          </label>
+          <input type="number" id="cfg-tag-pop" name="TAG_POPULATION_DEFAULT"
+                 class="config-input config-input-sm" min="1" max="512" value="4">
+        </div>
+
+        <div class="config-field">
+          <label class="config-label">
+            Reportar cada N tags
+            <span class="tooltip-icon" data-tip="CRÍTICO: define cada cuántos tags leídos el reader envía un reporte a la plataforma. Con valor 1, cada lectura se envía inmediatamente (tiempo real). Valores mayores reducen el tráfico de red pero introducen latencia. NO cambiar a 0 o null: impide que el reader reporte en inventario continuo.">?</span>
+          </label>
+          <input type="number" id="cfg-report-n" name="REPORT_EVERY_N_TAGS"
+                 class="config-input config-input-sm" min="1" max="100" value="1">
+          <span class="config-warn">⚠ No cambiar a 0. Ver tooltip.</span>
+        </div>
+      </div>
+
+      <!-- Grupo: Servidor web -->
+      <div class="config-group">
+        <h3 class="config-group-title">Servidor web</h3>
+
+        <div class="config-field config-field-row">
+          <div style="flex:1">
+            <label class="config-label">
+              Host
+              <span class="tooltip-icon" data-tip="Dirección en la que escucha el servidor web. '0.0.0.0' acepta conexiones desde cualquier IP de la red (recomendado para acceso desde otros equipos). '127.0.0.1' solo permite acceso desde el mismo servidor.">?</span>
+            </label>
+            <input type="text" id="cfg-web-host" name="WEB_HOST" class="config-input"
+                   placeholder="0.0.0.0">
+          </div>
+          <div style="width:120px">
+            <label class="config-label">
+              Puerto
+              <span class="tooltip-icon" data-tip="Puerto TCP en el que se sirve el panel web. Por defecto 5000. Cambiar si ese puerto está ocupado por otro servicio.">?</span>
+            </label>
+            <input type="number" id="cfg-web-port" name="WEB_PORT" class="config-input"
+                   min="1024" max="65535" value="5000">
+          </div>
+        </div>
+      </div>
+
+      <div class="config-form-actions">
+        <button type="button" class="btn-secondary" id="btn-recargar-config">Recargar desde archivo</button>
+        <button type="submit" class="btn-primary">Guardar en disco</button>
+      </div>
+
+    </form>
+  </div><!-- /tab-sistema -->
+
+</main>
+
+<!-- Modal: alta/edición de reader -->
+<div class="modal-overlay" id="modal-reader" hidden>
+  <div class="modal-box">
+    <h3 id="modal-reader-titulo">Nuevo reader</h3>
+    <form id="form-reader">
+      <input type="hidden" id="reader-id-edit" value="">
+      <label>Nombre
+        <input type="text" id="reader-nombre" placeholder="Ej: Reader Portón Expedición" required>
+      </label>
+      <label>Dirección IP
+        <input type="text" id="reader-ip" placeholder="Ej: 192.168.0.118" required
+               pattern="^(\d{1,3}\.){3}\d{1,3}$">
+      </label>
+      <label>Puerto LLRP
+        <input type="number" id="reader-puerto" value="5084" required>
+      </label>
+      <label>Modelo
+        <input type="text" id="reader-modelo" placeholder="Ej: Impinj R420">
+      </label>
+      <label>Ubicación
+        <input type="text" id="reader-ubicacion" placeholder="Ej: Portón Expedición">
+      </label>
+      <div class="form-row">
+        <label>Sesión Gen2
+          <select id="reader-session">
+            <option value="0">0</option>
+            <option value="1">1</option>
+            <option value="2" selected>2</option>
+            <option value="3">3</option>
+          </select>
+        </label>
+        <label>Población de tags
+          <input type="number" id="reader-tag-population" value="4" min="1">
+        </label>
+      </div>
+      <label>Potencia TX (dBm) — vacío = máxima
+        <input type="number" id="reader-tx-power" placeholder="Automático">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="btn-cancelar-reader">Cancelar</button>
+        <button type="submit" class="btn-primary">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: alta de antena (sin usar modal-overlay; se abre dentro del card) -->
+<div class="modal-overlay" id="modal-antena" hidden>
+  <div class="modal-box">
+    <h3>Nueva antena</h3>
+    <form id="form-antena">
+      <input type="hidden" id="antena-reader-id" value="">
+      <label>Puerto físico en el reader (1-4 típico)
+        <input type="number" id="antena-puerto" min="1" max="32" required>
+      </label>
+      <label>Nombre
+        <input type="text" id="antena-nombre" placeholder="Ej: Antena Portón A" required>
+      </label>
+      <label>Ubicación
+        <input type="text" id="antena-ubicacion" placeholder="Ej: Portón 7,4m - lado izquierdo">
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="btn-cancelar-antena">Cancelar</button>
+        <button type="submit" class="btn-primary">Agregar antena</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<footer class="footer-note">
+  Plataforma RFID — TECSIDEL
+</footer>
+
+<script src="{{ url_for('static', filename='configuracion.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Documentación Técnica — Plataforma RFID</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Base ──────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:         #0D1117;
+  --sidebar-bg: #111820;
+  --panel:      #161D26;
+  --panel-alt:  #1C2530;
+  --border:     #21303D;
+  --text:       #CDD9E5;
+  --text-dim:   #768899;
+  --text-head:  #E6EDF3;
+  --accent:     #388BFD;
+  --accent-soft:#1B3A6A;
+  --green:      #3FB950;
+  --green-soft: #133624;
+  --amber:      #D29922;
+  --amber-soft: #3A2D0E;
+  --red:        #F85149;
+  --red-soft:   #3D1317;
+  --purple:     #BC8CFF;
+  --teal:       #39C5CF;
+  --mono:       'JetBrains Mono', monospace;
+  --sans:       'Inter', system-ui, sans-serif;
+  --sidebar-w:  280px;
+  --topbar-h:   56px;
+}
+
+html { scroll-behavior: smooth; }
+body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 15px; line-height: 1.7; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+code { font-family: var(--mono); font-size: 0.875em; background: var(--panel-alt); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--teal); }
+pre { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; overflow-x: auto; margin: 1rem 0; }
+pre code { background: none; border: none; padding: 0; color: var(--text); font-size: 0.85em; line-height: 1.65; }
+h1, h2, h3, h4 { font-family: var(--sans); color: var(--text-head); line-height: 1.3; }
+p { margin-bottom: 0.85rem; }
+ul, ol { padding-left: 1.5rem; margin-bottom: 0.85rem; }
+li { margin-bottom: 0.3rem; }
+hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+
+/* ── Topbar ─────────────────────────────────────────────────────────── */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; height: var(--topbar-h);
+  background: var(--sidebar-bg); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; padding: 0 1.5rem; gap: 1rem; z-index: 100;
+}
+.topbar-logo { font-weight: 700; font-size: 13px; color: var(--accent); letter-spacing: .5px; }
+.topbar-title { font-size: 14px; color: var(--text-dim); }
+.topbar-title span { color: var(--text); font-weight: 500; }
+.topbar-search {
+  margin-left: auto; display: flex; align-items: center; gap: 8px;
+  background: var(--panel-alt); border: 1px solid var(--border);
+  border-radius: 8px; padding: 6px 12px;
+}
+.topbar-search input {
+  background: none; border: none; outline: none; color: var(--text);
+  font-family: var(--sans); font-size: 13px; width: 220px;
+}
+.topbar-search input::placeholder { color: var(--text-dim); }
+.topbar-version {
+  font-size: 11px; color: var(--text-dim); background: var(--panel-alt);
+  border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px;
+  white-space: nowrap;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────── */
+.sidebar {
+  position: fixed; top: var(--topbar-h); left: 0; bottom: 0;
+  width: var(--sidebar-w); background: var(--sidebar-bg);
+  border-right: 1px solid var(--border); overflow-y: auto; padding: 1.25rem 0;
+  scrollbar-width: thin; scrollbar-color: var(--border) transparent;
+}
+.sidebar-section { margin-bottom: 0.25rem; }
+.sidebar-section-title {
+  font-size: 11px; font-weight: 600; color: var(--text-dim);
+  text-transform: uppercase; letter-spacing: .8px;
+  padding: 0.5rem 1.25rem; margin-top: 0.75rem;
+}
+.sidebar-link {
+  display: block; padding: 6px 1.25rem 6px 1.5rem; font-size: 13.5px;
+  color: var(--text-dim); cursor: pointer; border-left: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+}
+.sidebar-link:hover { color: var(--text); background: rgba(255,255,255,.03); }
+.sidebar-link.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-soft); }
+.sidebar-link.sub { padding-left: 2.25rem; font-size: 12.5px; }
+
+/* ── Main content ────────────────────────────────────────────────────── */
+.main {
+  margin-left: var(--sidebar-w); margin-top: var(--topbar-h);
+  padding: 2.5rem 3rem 4rem; max-width: 920px;
+}
+.section { display: none; }
+.section.visible { display: block; }
+
+/* ── Section header ──────────────────────────────────────────────────── */
+.section-badge {
+  display: inline-block; font-size: 11px; font-weight: 600; padding: 2px 9px;
+  border-radius: 20px; margin-bottom: .75rem; text-transform: uppercase; letter-spacing: .5px;
+}
+.badge-core     { background: var(--accent-soft); color: var(--accent); }
+.badge-db       { background: var(--green-soft);  color: var(--green); }
+.badge-api      { background: var(--amber-soft);  color: var(--amber); }
+.badge-frontend { background: #2A1D3D; color: var(--purple); }
+.badge-ops      { background: #1D2A2A; color: var(--teal); }
+
+.section-title { font-size: 2rem; font-weight: 700; margin-bottom: .4rem; color: var(--text-head); }
+.section-lead  { font-size: 1.05rem; color: var(--text-dim); margin-bottom: 2rem; }
+
+h2.sub { font-size: 1.3rem; font-weight: 600; margin: 2rem 0 .75rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+h3.sub { font-size: 1.05rem; font-weight: 600; margin: 1.5rem 0 .5rem; color: var(--text-head); }
+h4.sub { font-size: .95rem; font-weight: 600; margin: 1.2rem 0 .4rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: .5px; }
+
+/* ── Callout boxes ───────────────────────────────────────────────────── */
+.callout {
+  border-radius: 8px; padding: 1rem 1.25rem; margin: 1.25rem 0;
+  border-left: 3px solid; font-size: 14px;
+}
+.callout-info    { background: var(--accent-soft); border-color: var(--accent); }
+.callout-warn    { background: var(--amber-soft);  border-color: var(--amber); }
+.callout-danger  { background: var(--red-soft);    border-color: var(--red); }
+.callout-success { background: var(--green-soft);  border-color: var(--green); }
+.callout strong  { display: block; margin-bottom: .3rem; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; }
+
+/* ── Tables ──────────────────────────────────────────────────────────── */
+.doc-table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 14px; }
+.doc-table th {
+  background: var(--panel-alt); color: var(--text-head); font-weight: 600;
+  padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border);
+}
+.doc-table td { padding: 9px 14px; border-bottom: 1px solid var(--border); color: var(--text); vertical-align: top; }
+.doc-table tr:last-child td { border-bottom: none; }
+.doc-table tr:hover td { background: rgba(255,255,255,.02); }
+.doc-table td:first-child { font-family: var(--mono); font-size: .82em; color: var(--teal); white-space: nowrap; }
+
+/* ── Method badges ───────────────────────────────────────────────────── */
+.method {
+  display: inline-block; font-family: var(--mono); font-size: 11px; font-weight: 700;
+  padding: 2px 8px; border-radius: 4px; margin-right: 8px; vertical-align: middle;
+}
+.get    { background: #0D3121; color: var(--green); }
+.post   { background: #1E2D0D; color: #8BC34A; }
+.put    { background: var(--amber-soft); color: var(--amber); }
+.delete { background: var(--red-soft); color: var(--red); }
+
+.endpoint {
+  font-family: var(--mono); font-size: .9em; color: var(--text-head);
+  background: var(--panel); border: 1px solid var(--border);
+  border-radius: 8px; padding: .75rem 1rem; margin: .75rem 0; display: flex; align-items: center; gap: .5rem;
+}
+
+/* ── Field rows ──────────────────────────────────────────────────────── */
+.field-row {
+  padding: .75rem 0; border-bottom: 1px solid var(--border);
+  display: grid; grid-template-columns: 200px 1fr; gap: 1rem; align-items: start;
+}
+.field-name { font-family: var(--mono); font-size: .85em; color: var(--teal); }
+.field-type { font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+.field-desc { font-size: 14px; }
+.field-constraint { font-size: 12px; color: var(--amber); margin-top: 3px; }
+
+/* ── Schema diagram ──────────────────────────────────────────────────── */
+.schema-box {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 1rem; margin: .75rem 0; font-family: var(--mono); font-size: .83em;
+}
+.schema-box .tname { color: var(--accent); font-weight: 700; font-size: .95em; margin-bottom: .5rem; }
+.schema-col { display: flex; gap: .5rem; padding: 2px 0; align-items: center; }
+.schema-col .col-name { color: var(--text-head); min-width: 220px; }
+.schema-col .col-type { color: var(--amber); min-width: 130px; }
+.schema-col .col-note { color: var(--text-dim); font-size: .9em; }
+.pk { color: var(--green); font-size: 10px; font-weight: 700; border: 1px solid var(--green); border-radius: 3px; padding: 0 4px; }
+.fk { color: var(--purple); font-size: 10px; font-weight: 700; border: 1px solid var(--purple); border-radius: 3px; padding: 0 4px; }
+.idx { color: var(--amber); font-size: 10px; font-weight: 700; border: 1px solid var(--amber); border-radius: 3px; padding: 0 4px; }
+
+/* ── Thread diagram ──────────────────────────────────────────────────── */
+.thread-row {
+  display: flex; align-items: center; gap: 1rem; padding: .6rem 1rem;
+  background: var(--panel); border: 1px solid var(--border); border-radius: 6px; margin: .4rem 0;
+}
+.thread-name { font-family: var(--mono); font-size: .85em; color: var(--teal); min-width: 200px; }
+.thread-role { font-size: 13px; color: var(--text-dim); }
+
+/* ── Search highlight ────────────────────────────────────────────────── */
+.highlight { background: rgba(210, 153, 34, 0.3); border-radius: 2px; }
+.search-empty { padding: 1rem; text-align: center; color: var(--text-dim); font-size: 13px; display: none; }
+
+/* ── TOC inline ──────────────────────────────────────────────────────── */
+.toc-inline { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem 1.5rem; margin: 1.5rem 0; }
+.toc-inline h4 { font-size: 13px; color: var(--text-dim); margin-bottom: .75rem; text-transform: uppercase; letter-spacing: .5px; }
+.toc-inline ol { margin: 0; padding-left: 1.25rem; }
+.toc-inline li { font-size: 14px; margin-bottom: .3rem; }
+
+/* ── Scroll spy active ───────────────────────────────────────────────── */
+.anchor-target { scroll-margin-top: calc(var(--topbar-h) + 1rem); }
+
+/* ── Flow diagram ────────────────────────────────────────────────────── */
+.flow { display: flex; flex-direction: column; gap: 0; margin: 1rem 0; }
+.flow-step { display: flex; align-items: stretch; }
+.flow-node {
+  background: var(--panel-alt); border: 1px solid var(--border);
+  border-radius: 8px; padding: .6rem 1rem; font-size: 13px;
+  display: flex; align-items: center; gap: .75rem; flex: 1;
+}
+.flow-node .node-icon { font-size: 1.2rem; flex-shrink: 0; }
+.flow-node .node-text b { display: block; color: var(--text-head); }
+.flow-node .node-text span { color: var(--text-dim); font-size: 12px; }
+.flow-arrow { text-align: center; color: var(--border); font-size: 1.4rem; line-height: 1.6; padding: .1rem 0; }
+
+@media (max-width: 900px) {
+  .sidebar { transform: translateX(-100%); }
+  .main { margin-left: 0; padding: 1.5rem 1.25rem; }
+  .topbar-search { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Topbar ──────────────────────────────────────────────────────────── -->
+<header class="topbar">
+  <span class="topbar-logo">RFID PLATFORM</span>
+  <span class="topbar-title">Documentación técnica — <span>v1.0</span></span>
+  <div class="topbar-search">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#768899" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    <input type="text" id="search-input" placeholder="Buscar en la documentación..." autocomplete="off">
+  </div>
+  <span class="topbar-version">Python 3.9+ · Flask · SQL Server</span>
+</header>
+
+<!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+<nav class="sidebar" id="sidebar">
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Introducción</div>
+    <a class="sidebar-link" data-section="overview">Visión general</a>
+    <a class="sidebar-link" data-section="quickstart">Inicio rápido</a>
+    <a class="sidebar-link" data-section="architecture">Arquitectura</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Base de datos</div>
+    <a class="sidebar-link" data-section="db-schema">Esquema de tablas</a>
+    <a class="sidebar-link sub" data-section="db-schema">dbo.Readers</a>
+    <a class="sidebar-link sub" data-section="db-schema">dbo.Antenas</a>
+    <a class="sidebar-link sub" data-section="db-schema">dbo.LecturasRFID</a>
+    <a class="sidebar-link sub" data-section="db-schema">dbo.LogEstadoReaders</a>
+    <a class="sidebar-link" data-section="db-views">Vistas analíticas</a>
+    <a class="sidebar-link" data-section="db-queries">Consultas de ejemplo</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Módulos Python</div>
+    <a class="sidebar-link" data-section="mod-config">core/config.py</a>
+    <a class="sidebar-link" data-section="mod-database">core/database.py</a>
+    <a class="sidebar-link" data-section="mod-rfid">core/rfid_manager.py</a>
+    <a class="sidebar-link" data-section="mod-epc">core/epc_decoder.py</a>
+    <a class="sidebar-link" data-section="mod-ts">core/timestamp_utils.py</a>
+    <a class="sidebar-link" data-section="mod-app">app.py</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">API REST</div>
+    <a class="sidebar-link" data-section="api-readers">Readers</a>
+    <a class="sidebar-link" data-section="api-antenas">Antenas</a>
+    <a class="sidebar-link" data-section="api-config">Configuración</a>
+    <a class="sidebar-link" data-section="api-informes">Informes</a>
+    <a class="sidebar-link" data-section="api-sistema">Sistema</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Frontend</div>
+    <a class="sidebar-link" data-section="fe-overview">Estructura de páginas</a>
+    <a class="sidebar-link" data-section="fe-websocket">WebSocket / SocketIO</a>
+    <a class="sidebar-link" data-section="fe-charts">Gráficos (Chart.js)</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-title">Operación</div>
+    <a class="sidebar-link" data-section="ops-threads">Hilos del sistema</a>
+    <a class="sidebar-link" data-section="ops-buffer">Buffer de lecturas</a>
+    <a class="sidebar-link" data-section="ops-llrp">Protocolo LLRP</a>
+    <a class="sidebar-link" data-section="ops-troubleshoot">Troubleshooting</a>
+    <a class="sidebar-link" data-section="ops-diag">Scripts de diagnóstico</a>
+  </div>
+
+</nav>
+
+<!-- ── Main ────────────────────────────────────────────────────────────── -->
+<main class="main" id="main-content">
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- OVERVIEW -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section visible" id="section-overview">
+  <span class="section-badge badge-core">Introducción</span>
+  <h1 class="section-title">Visión general</h1>
+  <p class="section-lead">Plataforma de trazabilidad de activos mediante tecnología RFID. Desarrollada por TECSIDEL.</p>
+
+  <p>La plataforma es una aplicación web <strong>multi-reader</strong> que conecta simultáneamente a N lectores RFID, captura las lecturas de los tags que cruzan los portones o puntos de control instrumentados, las persiste en SQL Server, y las expone en tiempo real a través de un panel web y de una API REST.</p>
+
+  <div class="toc-inline">
+    <h4>Componentes principales</h4>
+    <ol>
+      <li><strong>Backend Python (Flask)</strong> — servidor web, API REST, WebSocket, orquestación de hilos</li>
+      <li><strong>Módulo RFID (sllurp)</strong> — conexiones LLRP a los lectores físicos</li>
+      <li><strong>Capa de datos (pyodbc)</strong> — acceso a SQL Server con buffer de escritura</li>
+      <li><strong>Frontend web</strong> — panel en vivo, informes estadísticos, configuración</li>
+      <li><strong>Base de datos SQL Server</strong> — persistencia completa de lecturas, configuración y logs</li>
+    </ol>
+  </div>
+
+  <div class="flow">
+    <div class="flow-step"><div class="flow-node"><span class="node-icon">📡</span><div class="node-text"><b>Reader RFID</b><span>Detecta tags · protocolo LLRP TCP/5084</span></div></div></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step"><div class="flow-node"><span class="node-icon">🔗</span><div class="node-text"><b>rfid_manager.py</b><span>Un hilo por reader · reconexión automática · decodificación de antena</span></div></div></div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step"><div class="flow-node"><span class="node-icon">⚙️</span><div class="node-text"><b>app.py · on_tag_report()</b><span>Decodifica EPC · actualiza estado en memoria · emite WebSocket</span></div></div></div>
+    <div class="flow-arrow">↓↘</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:.5rem;margin:.1rem 0">
+      <div class="flow-node"><span class="node-icon">🗄️</span><div class="node-text"><b>BufferLecturas</b><span>INSERT en lotes cada N segundos</span></div></div>
+      <div class="flow-node"><span class="node-icon">🌐</span><div class="node-text"><b>SocketIO → navegador</b><span>Actualización en vivo sin polling</span></div></div>
+    </div>
+    <div class="flow-arrow">↓</div>
+    <div class="flow-step"><div class="flow-node"><span class="node-icon">🗃️</span><div class="node-text"><b>SQL Server · dbo.LecturasRFID</b><span>Historial permanente · explotación con Power BI o SQL directo</span></div></div></div>
+  </div>
+
+  <h2 class="sub">Stack tecnológico</h2>
+  <table class="doc-table">
+    <thead><tr><th>Capa</th><th>Tecnología</th><th>Versión mínima</th></tr></thead>
+    <tbody>
+      <tr><td>Lenguaje backend</td><td>Python</td><td>3.9</td></tr>
+      <tr><td>Framework web</td><td>Flask</td><td>3.x</td></tr>
+      <tr><td>WebSocket</td><td>Flask-SocketIO + python-socketio</td><td>5.x</td></tr>
+      <tr><td>Protocolo RFID</td><td>sllurp (LLRP)</td><td>3.0.5</td></tr>
+      <tr><td>Acceso a datos</td><td>pyodbc</td><td>5.x</td></tr>
+      <tr><td>Base de datos</td><td>Microsoft SQL Server</td><td>2016+ / Express</td></tr>
+      <tr><td>Driver ODBC</td><td>ODBC Driver 17 (o 18) for SQL Server</td><td>17+</td></tr>
+      <tr><td>Gráficos frontend</td><td>Chart.js</td><td>4.4</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- QUICKSTART -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-quickstart">
+  <span class="section-badge badge-ops">Inicio rápido</span>
+  <h1 class="section-title">Inicio rápido</h1>
+  <p class="section-lead">Pasos para poner en marcha el sistema desde cero.</p>
+
+  <h2 class="sub">1. Requisitos previos</h2>
+  <ul>
+    <li>Python 3.9 o superior (<code>python --version</code>)</li>
+    <li>Microsoft SQL Server (Express o superior)</li>
+    <li>ODBC Driver 17 o 18 for SQL Server instalado en el servidor donde correrá la app</li>
+    <li>Acceso de red entre el servidor de la app y cada reader RFID (puerto TCP 5084)</li>
+  </ul>
+
+  <h2 class="sub">2. Instalar dependencias Python</h2>
+  <pre><code>cd rfid_plataforma
+python -m venv venv
+venv\Scripts\activate        # Windows
+pip install -r requirements.txt</code></pre>
+
+  <p>Contenido de <code>requirements.txt</code>:</p>
+  <pre><code>Flask==3.1.3
+Flask-SocketIO==5.6.1
+python-socketio==5.12.0
+sllurp==3.0.5
+eventlet==0.41.0
+pyodbc==5.3.0</code></pre>
+
+  <h2 class="sub">3. Crear la base de datos</h2>
+  <pre><code>-- En SQL Server Management Studio (SSMS):
+CREATE DATABASE RFID_FPT;
+
+-- Luego ejecutar sql/schema.sql contra esa base</code></pre>
+
+  <h2 class="sub">4. Configurar conexión</h2>
+  <p>Editar <code>app/core/config.py</code>:</p>
+  <pre><code>DB_DRIVER  = "ODBC Driver 17 for SQL Server"
+DB_SERVER  = "localhost\\SQLEXPRESS"   # o "GEN01\\SQL"
+DB_DATABASE = "RFID_FPT"
+DB_TRUSTED_CONNECTION = True           # Windows Auth</code></pre>
+
+  <h2 class="sub">5. Verificar conexión</h2>
+  <pre><code>cd app
+python diagnostico_sql.py</code></pre>
+
+  <h2 class="sub">6. Arrancar la plataforma</h2>
+  <pre><code>python app.py</code></pre>
+  <p>Abrir <strong>http://localhost:5000</strong> → Configuración → agregar el primer reader y sus antenas. La conexión LLRP al reader se establece automáticamente en segundos.</p>
+
+  <div class="callout callout-info">
+    <strong>Nota</strong> La documentación técnica está disponible en <code>http://localhost:5000/docs</code> (esta misma página). No existe enlace desde ninguna otra pantalla de la aplicación.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- ARCHITECTURE -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-architecture">
+  <span class="section-badge badge-core">Arquitectura</span>
+  <h1 class="section-title">Arquitectura del sistema</h1>
+  <p class="section-lead">Diseño de capas, separación de responsabilidades y modelo de concurrencia.</p>
+
+  <h2 class="sub">Estructura de carpetas</h2>
+  <pre><code>rfid_plataforma/
+├── sql/
+│   └── schema.sql               # DDL completo: tablas, índices y vistas
+├── requirements.txt
+└── app/
+    ├── app.py                   # Punto de entrada: Flask, SocketIO, rutas HTTP
+    ├── diagnostico_sql.py       # Herramienta: prueba conexión a BD (standalone)
+    ├── diagnostico_llrp.py      # Herramienta: prueba un reader RFID (standalone)
+    ├── core/
+    │   ├── config.py            # Variables de entorno y parámetros globales
+    │   ├── database.py          # Capa de acceso a SQL Server + BufferLecturas
+    │   ├── rfid_manager.py      # Gestor multi-reader (ConexionReader + GestorMultiReader)
+    │   ├── epc_decoder.py       # Decodificación de EPC (bytes → hex + ASCII)
+    │   └── timestamp_utils.py   # Conversión timestamps LLRP → datetime
+    ├── static/
+    │   ├── style.css            # Hoja de estilos unificada (tema oscuro)
+    │   ├── app.js               # Panel en vivo (WebSocket client)
+    │   ├── configuracion.js     # CRUD readers/antenas + config del sistema
+    │   └── informes.js          # Dashboard estadístico (Chart.js)
+    └── templates/
+        ├── index.html           # Panel en vivo
+        ├── configuracion.html   # Configuración (pestañas: Readers / Sistema)
+        ├── informes.html        # Informes estadísticos
+        └── docs.html            # Esta documentación (acceso directo por URL)</code></pre>
+
+  <h2 class="sub">Modelo de concurrencia</h2>
+  <p>La aplicación es <strong>multi-hilo</strong>. Flask-SocketIO corre con <code>async_mode="threading"</code>, lo que permite que cada reader opere en su propio hilo de forma completamente independiente, sin interferir con el servidor HTTP ni con los demás readers.</p>
+
+  <table class="doc-table">
+    <thead><tr><th>Nombre del hilo</th><th>Responsabilidad</th><th>Ciclo de vida</th></tr></thead>
+    <tbody>
+      <tr><td>MainThread</td><td>Servidor Flask/SocketIO — atiende requests HTTP y conexiones WebSocket</td><td>Toda la vida del proceso</td></tr>
+      <tr><td>reader-{id}</td><td>Conexión LLRP a un reader físico. Un hilo por reader activo. Reconecta automáticamente con backoff de 5 s</td><td>Desde alta del reader hasta su baja o cierre de app</td></tr>
+      <tr><td>recarga-config-readers</td><td>Consulta la BD periódicamente para detectar altas/bajas de readers sin reiniciar la app</td><td>Desde <code>GestorMultiReader.iniciar()</code></td></tr>
+      <tr><td>buffer-lecturas-flush</td><td>Vuelca el buffer de lecturas en memoria a SQL Server cada N segundos</td><td>Desde <code>BufferLecturas.iniciar()</code></td></tr>
+      <tr><td>heartbeat</td><td>Imprime en log el estado general del sistema cada 15 s (lecturas totales, pendientes en buffer, readers activos)</td><td>Desde <code>iniciar_plataforma()</code></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- DB SCHEMA -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-db-schema">
+  <span class="section-badge badge-db">Base de datos</span>
+  <h1 class="section-title">Esquema de tablas</h1>
+  <p class="section-lead">Todas las tablas usan el esquema <code>dbo</code>. Script completo en <code>sql/schema.sql</code>.</p>
+
+  <div class="callout callout-warn">
+    <strong>Política de borrado lógico</strong> Ninguna tabla usa DELETE físico. Los readers y antenas se desactivan con <code>Activo = 0</code> / <code>Activa = 0</code>. Las lecturas y logs son append-only y nunca se eliminan automáticamente.
+  </div>
+
+  <!-- Readers -->
+  <h2 class="sub" id="t-readers">dbo.Readers</h2>
+  <p>Configuración de cada lector RFID físico. Es la tabla maestra de la plataforma.</p>
+  <div class="schema-box">
+    <div class="tname">dbo.Readers</div>
+    <div class="schema-col"><span class="col-name">ReaderId</span><span class="col-type">INT IDENTITY</span><span class="pk">PK</span></div>
+    <div class="schema-col"><span class="col-name">Nombre</span><span class="col-type">NVARCHAR(100)</span><span class="col-note">NOT NULL — nombre descriptivo del reader</span></div>
+    <div class="schema-col"><span class="col-name">IpAddress</span><span class="col-type">VARCHAR(45)</span><span class="col-note">NOT NULL — IPv4 o IPv6</span></div>
+    <div class="schema-col"><span class="col-name">Puerto</span><span class="col-type">INT</span><span class="col-note">DEFAULT 5084 — puerto LLRP</span></div>
+    <div class="schema-col"><span class="col-name">Modelo</span><span class="col-type">NVARCHAR(50)</span><span class="col-note">NULL — texto libre (ej. "Impinj R420")</span></div>
+    <div class="schema-col"><span class="col-name">Ubicacion</span><span class="col-type">NVARCHAR(200)</span><span class="col-note">NULL — texto libre (ej. "Portón Expedición")</span></div>
+    <div class="schema-col"><span class="col-name">Activo</span><span class="col-type">BIT</span><span class="col-note">DEFAULT 1 — borrado lógico</span></div>
+    <div class="schema-col"><span class="col-name">SessionGen2</span><span class="col-type">TINYINT</span><span class="col-note">DEFAULT 2 — sesión Gen2 (0-3)</span></div>
+    <div class="schema-col"><span class="col-name">TagPopulation</span><span class="col-type">INT</span><span class="col-note">DEFAULT 4 — estimación de tags simultáneos</span></div>
+    <div class="schema-col"><span class="col-name">TxPowerDbm</span><span class="col-type">INT</span><span class="col-note">NULL — potencia TX; NULL = máxima del reader</span></div>
+    <div class="schema-col"><span class="col-name">FechaCreacion</span><span class="col-type">DATETIME2</span><span class="col-note">DEFAULT SYSUTCDATETIME()</span></div>
+    <div class="schema-col"><span class="col-name">FechaModificado</span><span class="col-type">DATETIME2</span><span class="col-note">DEFAULT SYSUTCDATETIME() — actualizado en cada PUT</span></div>
+  </div>
+  <p>Restricción única: <code>UQ_Readers_Ip</code> sobre <code>(IpAddress, Puerto)</code> — no pueden existir dos readers con la misma IP y puerto.</p>
+
+  <!-- Antenas -->
+  <h2 class="sub" id="t-antenas">dbo.Antenas</h2>
+  <p>Cada antena pertenece a un reader y corresponde a un puerto físico del equipo (típicamente 1-4).</p>
+  <div class="schema-box">
+    <div class="tname">dbo.Antenas</div>
+    <div class="schema-col"><span class="col-name">AntenaId</span><span class="col-type">INT IDENTITY</span><span class="pk">PK</span></div>
+    <div class="schema-col"><span class="col-name">ReaderId</span><span class="col-type">INT</span><span class="fk">FK → Readers</span></div>
+    <div class="schema-col"><span class="col-name">PuertoFisico</span><span class="col-type">TINYINT</span><span class="col-note">NOT NULL — 1, 2, 3, 4...</span></div>
+    <div class="schema-col"><span class="col-name">Nombre</span><span class="col-type">NVARCHAR(100)</span><span class="col-note">NOT NULL</span></div>
+    <div class="schema-col"><span class="col-name">Ubicacion</span><span class="col-type">NVARCHAR(200)</span><span class="col-note">NULL</span></div>
+    <div class="schema-col"><span class="col-name">Activa</span><span class="col-type">BIT</span><span class="col-note">DEFAULT 1 — borrado lógico</span></div>
+    <div class="schema-col"><span class="col-name">FechaCreacion</span><span class="col-type">DATETIME2</span><span class="col-note">DEFAULT SYSUTCDATETIME()</span></div>
+  </div>
+  <p>Restricción única: <code>UQ_Antenas_ReaderPuerto</code> sobre <code>(ReaderId, PuertoFisico)</code>.</p>
+
+  <!-- LecturasRFID -->
+  <h2 class="sub" id="t-lecturas">dbo.LecturasRFID</h2>
+  <p>Tabla principal. Una fila por cada lectura de tag recibida. <strong>Append-only</strong>. Es la fuente de todos los informes.</p>
+  <div class="schema-box">
+    <div class="tname">dbo.LecturasRFID</div>
+    <div class="schema-col"><span class="col-name">LecturaId</span><span class="col-type">BIGINT IDENTITY</span><span class="pk">PK</span></div>
+    <div class="schema-col"><span class="col-name">AntenaId</span><span class="col-type">INT</span><span class="fk">FK → Antenas</span><span class="idx">IX</span></div>
+    <div class="schema-col"><span class="col-name">EpcHex</span><span class="col-type">VARCHAR(64)</span><span class="col-note">NOT NULL — EPC en hexadecimal (siempre presente)</span><span class="idx">IX</span></div>
+    <div class="schema-col"><span class="col-name">EpcAscii</span><span class="col-type">VARCHAR(64)</span><span class="col-note">NULL — si el tag codifica texto legible</span></div>
+    <div class="schema-col"><span class="col-name">Rssi</span><span class="col-type">SMALLINT</span><span class="col-note">NULL — Peak RSSI en dBm (típicamente negativo)</span></div>
+    <div class="schema-col"><span class="col-name">TagSeenCount</span><span class="col-type">INT</span><span class="col-note">NULL — veces visto en la ráfaga de reporte</span></div>
+    <div class="schema-col"><span class="col-name">TimestampReader</span><span class="col-type">DATETIME2(6)</span><span class="col-note">NOT NULL — timestamp UTC del reader</span><span class="idx">IX</span></div>
+    <div class="schema-col"><span class="col-name">TimestampInsercion</span><span class="col-type">DATETIME2(6)</span><span class="col-note">DEFAULT SYSUTCDATETIME() — cuándo llegó a la BD</span></div>
+  </div>
+
+  <h3 class="sub">Índices en dbo.LecturasRFID</h3>
+  <table class="doc-table">
+    <thead><tr><th>Nombre</th><th>Columnas</th><th>Propósito</th></tr></thead>
+    <tbody>
+      <tr><td>PK_LecturasRFID</td><td>LecturaId ASC</td><td>Clave primaria</td></tr>
+      <tr><td>IX_LecturasRFID_Timestamp</td><td>TimestampReader DESC</td><td>Consultas por rango de fecha (informes)</td></tr>
+      <tr><td>IX_LecturasRFID_Epc</td><td>EpcHex, TimestampReader DESC</td><td>Búsqueda por tag y última vez visto</td></tr>
+      <tr><td>IX_LecturasRFID_Antena</td><td>AntenaId, TimestampReader DESC</td><td>Agrupaciones por punto de control</td></tr>
+    </tbody>
+  </table>
+
+  <!-- LogEstadoReaders -->
+  <h2 class="sub" id="t-log">dbo.LogEstadoReaders</h2>
+  <p>Log de eventos de conexión/desconexión de cada reader. Útil para auditoría y diagnóstico de caídas.</p>
+  <div class="schema-box">
+    <div class="tname">dbo.LogEstadoReaders</div>
+    <div class="schema-col"><span class="col-name">LogId</span><span class="col-type">BIGINT IDENTITY</span><span class="pk">PK</span></div>
+    <div class="schema-col"><span class="col-name">ReaderId</span><span class="col-type">INT</span><span class="fk">FK → Readers</span></div>
+    <div class="schema-col"><span class="col-name">Estado</span><span class="col-type">VARCHAR(20)</span><span class="col-note">'conectando' | 'conectado' | 'desconectado' | 'error'</span></div>
+    <div class="schema-col"><span class="col-name">Detalle</span><span class="col-type">NVARCHAR(500)</span><span class="col-note">NULL — mensaje de error o descripción</span></div>
+    <div class="schema-col"><span class="col-name">Timestamp</span><span class="col-type">DATETIME2</span><span class="col-note">DEFAULT SYSUTCDATETIME()</span></div>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- DB VIEWS -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-db-views">
+  <span class="section-badge badge-db">Base de datos</span>
+  <h1 class="section-title">Vistas analíticas</h1>
+  <p class="section-lead">Tres vistas predefinidas para consumo directo desde Power BI, SSRS u otras herramientas sin necesidad de escribir JOINs.</p>
+
+  <h2 class="sub">dbo.vw_Lecturas</h2>
+  <p>Vista desnormalizada — una fila por lectura con todos los datos de antena y reader resueltos. <strong>Punto de partida recomendado para Power BI.</strong></p>
+  <pre><code>SELECT
+    L.LecturaId, L.EpcHex, L.EpcAscii, L.Rssi, L.TagSeenCount,
+    L.TimestampReader, L.TimestampInsercion,
+    A.AntenaId, A.Nombre AS NombreAntena, A.PuertoFisico, A.Ubicacion AS UbicacionAntena,
+    R.ReaderId, R.Nombre AS NombreReader, R.IpAddress, R.Ubicacion AS UbicacionReader
+FROM dbo.LecturasRFID L
+JOIN dbo.Antenas A ON A.AntenaId = L.AntenaId
+JOIN dbo.Readers R ON R.ReaderId = A.ReaderId</code></pre>
+
+  <h2 class="sub">dbo.vw_ResumenDiarioPorAntena</h2>
+  <p>Lecturas y tags únicos agrupados por día y antena. Ideal para gráficos de tendencia diaria en dashboards gerenciales.</p>
+  <pre><code>SELECT
+    CAST(L.TimestampReader AS DATE) AS Fecha,
+    A.AntenaId, A.Nombre AS NombreAntena, R.Nombre AS NombreReader,
+    COUNT(*) AS TotalLecturas,
+    COUNT(DISTINCT L.EpcHex) AS TagsUnicos
+FROM dbo.LecturasRFID L
+JOIN dbo.Antenas A ON A.AntenaId = L.AntenaId
+JOIN dbo.Readers R ON R.ReaderId = A.ReaderId
+GROUP BY CAST(L.TimestampReader AS DATE), A.AntenaId, A.Nombre, R.Nombre</code></pre>
+
+  <h2 class="sub">dbo.vw_UltimaLecturaPorTag</h2>
+  <p>Última vez que cada tag fue detectado por cualquier antena. Útil para saber "dónde fue visto por última vez" un activo.</p>
+  <pre><code>SELECT EpcHex, MAX(TimestampReader) AS UltimaVez
+FROM dbo.LecturasRFID
+GROUP BY EpcHex</code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- DB QUERIES -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-db-queries">
+  <span class="section-badge badge-db">Base de datos</span>
+  <h1 class="section-title">Consultas de ejemplo</h1>
+  <p class="section-lead">Consultas T-SQL listas para usar en SSMS o desde Power BI.</p>
+
+  <h3 class="sub">Lecturas por día (últimos 30 días)</h3>
+  <pre><code>SELECT CAST(TimestampReader AS DATE) AS Fecha,
+       COUNT(*) AS TotalLecturas,
+       COUNT(DISTINCT EpcHex) AS TagsUnicos
+FROM dbo.LecturasRFID
+WHERE TimestampReader >= DATEADD(DAY, -30, SYSUTCDATETIME())
+GROUP BY CAST(TimestampReader AS DATE)
+ORDER BY Fecha DESC;</code></pre>
+
+  <h3 class="sub">Ranking de antenas por actividad (último mes)</h3>
+  <pre><code>SELECT A.Nombre AS Antena, R.Nombre AS Reader,
+       COUNT(*) AS Lecturas, COUNT(DISTINCT L.EpcHex) AS TagsUnicos
+FROM dbo.LecturasRFID L
+JOIN dbo.Antenas A ON A.AntenaId = L.AntenaId
+JOIN dbo.Readers R ON R.ReaderId = A.ReaderId
+WHERE L.TimestampReader >= DATEADD(MONTH, -1, SYSUTCDATETIME())
+GROUP BY A.Nombre, R.Nombre
+ORDER BY Lecturas DESC;</code></pre>
+
+  <h3 class="sub">Historial de un tag específico</h3>
+  <pre><code>SELECT L.TimestampReader, A.Nombre AS Antena, R.Nombre AS Reader,
+       L.Rssi, L.EpcAscii
+FROM dbo.LecturasRFID L
+JOIN dbo.Antenas A ON A.AntenaId = L.AntenaId
+JOIN dbo.Readers R ON R.ReaderId = A.ReaderId
+WHERE L.EpcHex = '393039303030303030303030303030303030303031313138'
+ORDER BY L.TimestampReader DESC;</code></pre>
+
+  <h3 class="sub">Últimas lecturas por antena (una fila por antena)</h3>
+  <pre><code>SELECT A.Nombre, R.Nombre AS Reader,
+       MAX(L.TimestampReader) AS UltimaLectura
+FROM dbo.LecturasRFID L
+JOIN dbo.Antenas A ON A.AntenaId = L.AntenaId
+JOIN dbo.Readers R ON R.ReaderId = A.ReaderId
+GROUP BY A.Nombre, R.Nombre
+ORDER BY UltimaLectura DESC;</code></pre>
+
+  <h3 class="sub">Log de caídas de readers (últimas 24h)</h3>
+  <pre><code>SELECT R.Nombre, L.Estado, L.Detalle, L.Timestamp
+FROM dbo.LogEstadoReaders L
+JOIN dbo.Readers R ON R.ReaderId = L.ReaderId
+WHERE L.Estado IN ('desconectado', 'error')
+  AND L.Timestamp >= DATEADD(HOUR, -24, SYSUTCDATETIME())
+ORDER BY L.Timestamp DESC;</code></pre>
+
+  <h3 class="sub">Distribución por hora del día</h3>
+  <pre><code>SELECT DATEPART(HOUR, TimestampReader) AS Hora,
+       COUNT(*) AS Lecturas
+FROM dbo.LecturasRFID
+WHERE TimestampReader >= DATEADD(DAY, -7, SYSUTCDATETIME())
+GROUP BY DATEPART(HOUR, TimestampReader)
+ORDER BY Hora;</code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- MOD CONFIG -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-mod-config">
+  <span class="section-badge badge-core">Módulo Python</span>
+  <h1 class="section-title">core/config.py</h1>
+  <p class="section-lead">Archivo de configuración central. Es el único lugar donde se definen los parámetros de conexión a SQL Server y el comportamiento global de la plataforma.</p>
+
+  <div class="callout callout-info">
+    <strong>Edición desde el panel web</strong> El archivo puede modificarse desde <code>/configuracion</code> → pestaña "Sistema". Los cambios se escriben en disco y requieren reiniciar la app para tomar efecto.
+  </div>
+
+  <table class="doc-table">
+    <thead><tr><th>Variable</th><th>Tipo</th><th>Default</th><th>Descripción</th></tr></thead>
+    <tbody>
+      <tr><td>DB_DRIVER</td><td>str</td><td>"ODBC Driver 17…"</td><td>Nombre exacto del driver ODBC instalado</td></tr>
+      <tr><td>DB_SERVER</td><td>str</td><td>"localhost"</td><td>Servidor SQL en formato <code>HOST</code> o <code>HOST\INSTANCIA</code></td></tr>
+      <tr><td>DB_DATABASE</td><td>str</td><td>"RFID_FPT"</td><td>Nombre de la base de datos</td></tr>
+      <tr><td>DB_TRUSTED_CONNECTION</td><td>bool</td><td>True</td><td>True = Windows Auth; False = SQL Auth</td></tr>
+      <tr><td>DB_USERNAME</td><td>str</td><td>""</td><td>Solo para SQL Auth</td></tr>
+      <tr><td>DB_PASSWORD</td><td>str</td><td>""</td><td>Solo para SQL Auth</td></tr>
+      <tr><td>DB_ENCRYPT</td><td>bool</td><td>False</td><td>Cifrado TLS de la conexión</td></tr>
+      <tr><td>DB_TRUST_SERVER_CERTIFICATE</td><td>bool</td><td>True</td><td>Omitir validación de cert. (local dev)</td></tr>
+      <tr><td>INTERVALO_FLUSH_SEGUNDOS</td><td>float</td><td>2.0</td><td>Cada cuántos segundos se vuelca el buffer a la BD</td></tr>
+      <tr><td>TAMANO_MAXIMO_BUFFER</td><td>int</td><td>50000</td><td>Máximo de lecturas en memoria ante caída de BD</td></tr>
+      <tr><td>INTERVALO_RECARGA_CONFIG_SEGUNDOS</td><td>int</td><td>30</td><td>Frecuencia de detección de nuevos readers</td></tr>
+      <tr><td>SESSION_DEFAULT</td><td>int</td><td>2</td><td>Sesión Gen2 por defecto (0-3)</td></tr>
+      <tr><td>TAG_POPULATION_DEFAULT</td><td>int</td><td>4</td><td>Estimación de tags simultáneos en campo</td></tr>
+      <tr><td>REPORT_EVERY_N_TAGS</td><td>int</td><td>1</td><td>⚠️ No cambiar a 0. Trigger de reporte LLRP.</td></tr>
+      <tr><td>WEB_HOST</td><td>str</td><td>"0.0.0.0"</td><td>IP de escucha del servidor web</td></tr>
+      <tr><td>WEB_PORT</td><td>int</td><td>5000</td><td>Puerto TCP del servidor web</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-danger">
+    <strong>REPORT_EVERY_N_TAGS — crítico</strong> Si se establece en <code>0</code> o <code>None</code>, el reader construye un ROSpec con trigger <em>Upon_N_Tags_Or_End_Of_AISpec</em> con N=0, lo que significa que nunca reporta tags mientras el AISpec no termine. En inventario continuo el AISpec no tiene fin, por lo que el reader queda en silencio perpetuo aunque físicamente esté leyendo. Mantener siempre en 1 o superior.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- MOD DATABASE -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-mod-database">
+  <span class="section-badge badge-core">Módulo Python</span>
+  <h1 class="section-title">core/database.py</h1>
+  <p class="section-lead">Capa de acceso a datos. Incluye las funciones CRUD sobre readers/antenas, el registro de logs, y la clase <code>BufferLecturas</code> para inserción en batch.</p>
+
+  <h2 class="sub">Funciones de conexión</h2>
+  <div class="field-row"><div><div class="field-name">construir_connection_string()</div><div class="field-type">→ str</div></div><div class="field-desc">Arma el connection string ODBC leyendo las variables de <code>config.py</code>. Soporta Windows Auth y SQL Auth. Incluye <code>TrustServerCertificate</code> para entornos locales.</div></div>
+  <div class="field-row"><div><div class="field-name">obtener_conexion()</div><div class="field-type">→ pyodbc.Connection</div></div><div class="field-desc">Abre y devuelve una nueva conexión. Timeout de 10 segundos. Lanza excepción si falla — el caller es responsable de manejarla.</div></div>
+  <div class="field-row"><div><div class="field-name">probar_conexion()</div><div class="field-type">→ (bool, str)</div></div><div class="field-desc">Ejecuta <code>SELECT @@VERSION</code> y devuelve <code>(True, versión)</code> o <code>(False, mensaje_error)</code>. Usada por la API <code>/api/db/test</code> y el script de diagnóstico.</div></div>
+
+  <h2 class="sub">Dataclasses</h2>
+  <div class="field-row"><div><div class="field-name">ReaderConfig</div><div class="field-type">dataclass</div></div><div class="field-desc">Snapshot inmutable de la configuración de un reader leída de la BD. Campos: <code>reader_id, nombre, ip_address, puerto, modelo, ubicacion, activo, session_gen2, tag_population, tx_power_dbm, antenas: list[AntenaConfig]</code>.</div></div>
+  <div class="field-row"><div><div class="field-name">AntenaConfig</div><div class="field-type">dataclass</div></div><div class="field-desc">Configuración de una antena. Campos: <code>antena_id, reader_id, puerto_fisico, nombre, ubicacion, activa</code>.</div></div>
+
+  <h2 class="sub">CRUD de readers</h2>
+  <div class="field-row"><div><div class="field-name">obtener_readers_activos()</div><div class="field-type">→ list[ReaderConfig]</div></div><div class="field-desc">Lee todos los readers con <code>Activo=1</code> y sus antenas con <code>Activa=1</code>. N+1 consultas (una por reader para las antenas). Usada al arrancar y en el ciclo de recarga.</div></div>
+  <div class="field-row"><div><div class="field-name">crear_reader(...)</div><div class="field-type">→ int</div></div><div class="field-desc">INSERT en <code>dbo.Readers</code>. Usa <code>OUTPUT INSERTED.ReaderId</code> para devolver el ID asignado en una sola operación.</div></div>
+  <div class="field-row"><div><div class="field-name">actualizar_reader(reader_id, **campos)</div><div class="field-type">→ None</div></div><div class="field-desc">UPDATE dinámico con whitelist de columnas válidas. Actualiza automáticamente <code>FechaModificado</code>.</div></div>
+  <div class="field-row"><div><div class="field-name">eliminar_reader(reader_id)</div><div class="field-type">→ None</div></div><div class="field-desc">Borrado lógico: <code>Activo = 0</code>. El historial de lecturas de ese reader se conserva íntegro.</div></div>
+
+  <h2 class="sub">CRUD de antenas</h2>
+  <div class="field-row"><div><div class="field-name">crear_antena(...)</div><div class="field-type">→ int</div></div><div class="field-desc">INSERT en <code>dbo.Antenas</code>. Devuelve el <code>AntenaId</code> asignado.</div></div>
+  <div class="field-row"><div><div class="field-name">eliminar_antena(antena_id)</div><div class="field-type">→ None</div></div><div class="field-desc">Borrado lógico: <code>Activa = 0</code>.</div></div>
+
+  <h2 class="sub">BufferLecturas</h2>
+  <p>Clase que desacopla la recepción de lecturas de la escritura a BD. Las lecturas se encolan en un <code>deque</code> thread-safe y se vuelcan en lotes periódicos usando <code>cursor.fast_executemany = True</code> (optimización de pyodbc para bulk insert).</p>
+  <table class="doc-table">
+    <thead><tr><th>Método / Propiedad</th><th>Descripción</th></tr></thead>
+    <tbody>
+      <tr><td>agregar(antena_id, epc_hex, epc_ascii, rssi, tag_seen_count, timestamp_reader)</td><td>Encola una lectura. Si el buffer está lleno, descarta la más antigua con un warning en log.</td></tr>
+      <tr><td>iniciar()</td><td>Arranca el hilo <code>buffer-lecturas-flush</code> que ejecuta <code>_flush()</code> periódicamente.</td></tr>
+      <tr><td>detener()</td><td>Detiene el hilo y ejecuta un flush final para no perder lecturas al cerrar.</td></tr>
+      <tr><td>pendientes (property)</td><td>Cantidad de lecturas actualmente en el buffer (útil para monitoreo).</td></tr>
+      <tr><td>ultimo_error (property)</td><td>Último error de escritura a BD, o <code>None</code> si el último flush fue exitoso.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-info">
+    <strong>Resiliencia ante caída de BD</strong> Si <code>_flush()</code> falla, las lecturas del lote se re-encolan al frente del buffer (orden LIFO) para el próximo intento. El buffer actúa como buffer circular: al llenarse (<code>TAMANO_MAXIMO_BUFFER</code>) descarta las lecturas más antiguas primero.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- MOD RFID -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-mod-rfid">
+  <span class="section-badge badge-core">Módulo Python</span>
+  <h1 class="section-title">core/rfid_manager.py</h1>
+  <p class="section-lead">Gestión de N conexiones LLRP en paralelo. Dos clases principales: <code>ConexionReader</code> (un reader) y <code>GestorMultiReader</code> (orquestador).</p>
+
+  <h2 class="sub">ConexionReader</h2>
+  <p>Encapsula la conexión LLRP a un reader físico. Cada instancia vive en su propio hilo daemon (<code>reader-{id}</code>).</p>
+
+  <table class="doc-table">
+    <thead><tr><th>Método</th><th>Descripción</th></tr></thead>
+    <tbody>
+      <tr><td>_factory_llrp_config()</td><td>Construye el <code>LLRPReaderConfig</code>: antenas activas, sesión Gen2, potencia TX, <code>report_every_n_tags=1</code> (crítico), y el tag_content_selector que habilita AntennaID, PeakRSSI, LastSeenTimestamp y TagSeenCount.</td></tr>
+      <tr><td>_callback_tag_report(reader, tag_reports)</td><td>Invocado por sllurp por cada RO_ACCESS_REPORT recibido. Traduce AntennaID (puerto físico) a AntenaId (BD) usando el mapa <code>puerto_a_antena_id</code>. Llama al callback global <code>on_tag_report</code> de <code>app.py</code>.</td></tr>
+      <tr><td>conectar_y_correr()</td><td>Bloquea el hilo hasta desconexión. Configura LLRPReaderClient, registra callbacks, llama <code>connect()</code> y luego <code>join()</code>.</td></tr>
+      <tr><td>iniciar_en_hilo()</td><td>Lanza <code>_loop()</code> en un thread daemon. El loop llama a <code>conectar_y_correr()</code> y, ante desconexión, espera 5 s y reintenta indefinidamente.</td></tr>
+      <tr><td>detener()</td><td>Activa <code>_detener_flag</code> para que el loop no reintente, y llama <code>reader.disconnect()</code>.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="sub">GestorMultiReader</h2>
+  <p>Mantiene el diccionario <code>reader_id → ConexionReader</code> y recarga la configuración para detectar cambios sin reiniciar la app.</p>
+
+  <table class="doc-table">
+    <thead><tr><th>Método</th><th>Descripción</th></tr></thead>
+    <tbody>
+      <tr><td>iniciar()</td><td>Carga readers de la BD, inicia sus conexiones, y lanza el hilo <code>recarga-config-readers</code> con intervalo <code>INTERVALO_RECARGA_CONFIG_SEGUNDOS</code>.</td></tr>
+      <tr><td>recargar_ahora()</td><td>Lanza <code>_recargar_configuracion()</code> en un hilo nuevo inmediatamente. Llamado por las APIs de creación/edición/borrado de readers y antenas.</td></tr>
+      <tr><td>_recargar_configuracion()</td><td>Compara la BD actual vs los readers conectados. Detiene conexiones de readers eliminados. Detecta cambios de antenas (via <code>_firma_antenas()</code>) y reconecta solo ese reader. Inicia conexiones para readers nuevos.</td></tr>
+      <tr><td>_firma_antenas(reader_cfg)</td><td>Devuelve <code>tuple(sorted(puertos_fisicos))</code> para comparar si la lista de antenas cambió sin comparar objetos completos.</td></tr>
+      <tr><td>estado_actual()</td><td>Snapshot de todos los readers y su estado de conexión (usado por el heartbeat log).</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- MOD EPC -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-mod-epc">
+  <span class="section-badge badge-core">Módulo Python</span>
+  <h1 class="section-title">core/epc_decoder.py</h1>
+  <p class="section-lead">Decodificación robusta del EPC crudo entregado por sllurp, soportando los distintos formatos en que puede venir según la versión del firmware del reader.</p>
+
+  <h2 class="sub">decodificar_epc(tag: dict) → (str, str | None)</h2>
+  <p>Función principal. Devuelve siempre una tupla <code>(epc_hex, epc_ascii)</code>.</p>
+
+  <table class="doc-table">
+    <thead><tr><th>Caso</th><th>Entrada</th><th>epc_hex</th><th>epc_ascii</th></tr></thead>
+    <tbody>
+      <tr><td>Tag con EPC en bytes legibles como ASCII</td><td><code>b'909000000000000000001118'</code></td><td><code>"393039303030..."</code></td><td><code>"909000000000000000001118"</code></td></tr>
+      <tr><td>Tag con EPC binario estándar</td><td><code>b'\xE2\x00\x12\x34\x56\x78'</code></td><td><code>"E200123456789A"</code></td><td><code>None</code></td></tr>
+      <tr><td>EPC ya como string hex</td><td><code>"393039..."</code></td><td>upper del input</td><td>intenta ASCII</td></tr>
+      <tr><td>Sin EPC en el tag report</td><td><code>{}</code></td><td><code>"DESCONOCIDO"</code></td><td><code>None</code></td></tr>
+    </tbody>
+  </table>
+
+  <p><code>_intentar_decodificar_ascii()</code> considera texto válido solo si ≥90% de los bytes son caracteres ASCII imprimibles, y recorta padding de <code>\x00</code>. Esto evita que EPCs binarios que caen casualmente en rango ASCII se muestren como texto basura.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- MOD TS -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-mod-ts">
+  <span class="section-badge badge-core">Módulo Python</span>
+  <h1 class="section-title">core/timestamp_utils.py</h1>
+  <p class="section-lead">Conversión de timestamps LLRP a <code>datetime</code> con timezone UTC, compatible con pyodbc y SQL Server.</p>
+
+  <h2 class="sub">timestamp_llrp_a_datetime(tag) → datetime</h2>
+  <p>Lee el campo <code>LastSeenTimestampUTC</code> del tag report LLRP (microsegundos desde epoch UTC, puede venir como int directo o como dict con clave <code>Microseconds</code>). Convierte a <code>datetime(timezone.utc)</code>. Si el campo no está presente, devuelve <code>datetime.now(UTC)</code> como fallback.</p>
+  <p>Se usa <code>TimestampReader</code> (del reader) en lugar de la hora del servidor para máxima precisión, dado que el reader tiene su propio reloj sincronizable con NTP.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- MOD APP -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-mod-app">
+  <span class="section-badge badge-core">Módulo Python</span>
+  <h1 class="section-title">app.py</h1>
+  <p class="section-lead">Punto de entrada de la aplicación. Orquesta la inicialización de todos los subsistemas, define las rutas HTTP, maneja los eventos SocketIO, e implementa los callbacks de tag report y estado de reader.</p>
+
+  <h2 class="sub">Callbacks principales</h2>
+  <div class="field-row"><div><div class="field-name">on_tag_report(reader_cfg, antena_id, tag)</div></div><div class="field-desc">Llamado por cada tag report recibido desde cualquier reader. Decodifica EPC, extrae timestamp, encola en el buffer para BD, actualiza el estado en memoria (<code>ESTADO</code>), y emite <code>evento_lectura</code> y <code>kpis_actualizados</code> por WebSocket.</div></div>
+  <div class="field-row"><div><div class="field-name">on_estado_reader(reader_cfg, estado, detalle)</div></div><div class="field-desc">Llamado cuando cambia el estado de un reader (conectando/conectado/desconectado/error). Actualiza <code>ESTADO["estado_readers"]</code>, persiste en <code>dbo.LogEstadoReaders</code>, y emite <code>estado_reader</code> por WebSocket.</div></div>
+
+  <h2 class="sub">Estado en memoria (ESTADO)</h2>
+  <p>Diccionario global protegido por <code>threading.Lock</code>. Se usa para responder inmediatamente al primer cliente web que se conecta, sin necesidad de consultar la BD:</p>
+  <pre><code>ESTADO = {
+    "eventos_recientes":   deque(maxlen=300),  # últimas lecturas
+    "tags_unicos":         set(),              # EPCs vistos en la sesión
+    "lecturas_por_antena": defaultdict(int),   # conteo por antena_id
+    "lecturas_por_reader": defaultdict(int),   # conteo por reader_id
+    "estado_readers":      {},                 # reader_id → estado actual
+}</code></pre>
+
+  <div class="callout callout-warn">
+    <strong>Atención</strong> Este estado se pierde al reiniciar la app. Es un cache en memoria para el panel en vivo, no un reemplazo de la BD.
+  </div>
+
+  <h2 class="sub">Inicialización (iniciar_plataforma)</h2>
+  <ol>
+    <li>Prueba la conexión a SQL Server y loguea el resultado.</li>
+    <li>Inicia <code>BufferLecturas</code> (arranca el hilo de flush).</li>
+    <li>Instancia y arranca <code>GestorMultiReader</code> (carga readers de BD e inicia sus conexiones).</li>
+    <li>Lanza el hilo <code>heartbeat</code>.</li>
+  </ol>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- API READERS -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-api-readers">
+  <span class="section-badge badge-api">API REST</span>
+  <h1 class="section-title">API — Readers</h1>
+  <p class="section-lead">Endpoints para gestión completa de readers RFID. Todas las respuestas son JSON.</p>
+
+  <h3 class="sub">Listar readers activos</h3>
+  <div class="endpoint"><span class="method get">GET</span>/api/readers</div>
+  <p>Devuelve todos los readers con <code>Activo=1</code> junto con sus antenas activas anidadas.</p>
+  <pre><code>[{
+  "reader_id": 1,
+  "nombre": "Reader Expedición",
+  "ip_address": "192.168.0.118",
+  "puerto": 5084,
+  "modelo": "Impinj R420",
+  "ubicacion": "Portón Expedición FPT",
+  "session_gen2": 2,
+  "tag_population": 4,
+  "tx_power_dbm": null,
+  "antenas": [{
+    "antena_id": 1,
+    "puerto_fisico": 1,
+    "nombre": "Antena A",
+    "ubicacion": "Lado izquierdo"
+  }]
+}]</code></pre>
+
+  <h3 class="sub">Crear reader</h3>
+  <div class="endpoint"><span class="method post">POST</span>/api/readers</div>
+  <table class="doc-table">
+    <thead><tr><th>Campo</th><th>Tipo</th><th>Requerido</th><th>Descripción</th></tr></thead>
+    <tbody>
+      <tr><td>nombre</td><td>string</td><td>✓</td><td>Nombre descriptivo</td></tr>
+      <tr><td>ip_address</td><td>string</td><td>✓</td><td>IP del reader en la red</td></tr>
+      <tr><td>puerto</td><td>int</td><td>—</td><td>Default 5084</td></tr>
+      <tr><td>modelo</td><td>string</td><td>—</td><td>Texto libre</td></tr>
+      <tr><td>ubicacion</td><td>string</td><td>—</td><td>Texto libre</td></tr>
+      <tr><td>session_gen2</td><td>int</td><td>—</td><td>Default 2</td></tr>
+      <tr><td>tag_population</td><td>int</td><td>—</td><td>Default 4</td></tr>
+      <tr><td>tx_power_dbm</td><td>int|null</td><td>—</td><td>null = máxima potencia</td></tr>
+    </tbody>
+  </table>
+  <p>Respuesta: <code>{"ok": true, "reader_id": 1}</code>. Dispara <code>GestorMultiReader.recargar_ahora()</code> para iniciar la conexión LLRP inmediatamente.</p>
+
+  <h3 class="sub">Actualizar reader</h3>
+  <div class="endpoint"><span class="method put">PUT</span>/api/readers/{reader_id}</div>
+  <p>Acepta los mismos campos que POST (todos opcionales). Actualiza solo los campos enviados. También dispara recarga del gestor.</p>
+
+  <h3 class="sub">Eliminar reader</h3>
+  <div class="endpoint"><span class="method delete">DELETE</span>/api/readers/{reader_id}</div>
+  <p>Borrado lógico (<code>Activo = 0</code>). El gestor detecta la baja en la próxima recarga y desconecta el hilo LLRP correspondiente.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- API ANTENAS -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-api-antenas">
+  <span class="section-badge badge-api">API REST</span>
+  <h1 class="section-title">API — Antenas</h1>
+
+  <h3 class="sub">Crear antena</h3>
+  <div class="endpoint"><span class="method post">POST</span>/api/readers/{reader_id}/antenas</div>
+  <table class="doc-table">
+    <thead><tr><th>Campo</th><th>Tipo</th><th>Requerido</th><th>Descripción</th></tr></thead>
+    <tbody>
+      <tr><td>puerto_fisico</td><td>int</td><td>✓</td><td>Puerto del reader (1-4 típico)</td></tr>
+      <tr><td>nombre</td><td>string</td><td>✓</td><td>Nombre descriptivo</td></tr>
+      <tr><td>ubicacion</td><td>string</td><td>—</td><td>Texto libre</td></tr>
+    </tbody>
+  </table>
+  <p>Respuesta: <code>{"ok": true, "antena_id": 3}</code>. Dispara recarga del gestor. Si el reader ya estaba conectado y la lista de antenas cambió, se reconecta automáticamente con el nuevo ROSpec.</p>
+
+  <h3 class="sub">Eliminar antena</h3>
+  <div class="endpoint"><span class="method delete">DELETE</span>/api/antenas/{antena_id}</div>
+  <p>Borrado lógico (<code>Activa = 0</code>). El reader se reconecta para aplicar la nueva lista de antenas.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- API CONFIG -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-api-config">
+  <span class="section-badge badge-api">API REST</span>
+  <h1 class="section-title">API — Configuración del sistema</h1>
+
+  <h3 class="sub">Leer configuración actual</h3>
+  <div class="endpoint"><span class="method get">GET</span>/api/config/sistema</div>
+  <p>Devuelve todas las variables de <code>config.py</code> como JSON. La contraseña se enmascara como <code>••••••</code>.</p>
+
+  <h3 class="sub">Guardar configuración</h3>
+  <div class="endpoint"><span class="method post">POST</span>/api/config/sistema</div>
+  <p>Escribe un nuevo <code>config.py</code> en disco con los valores del body JSON. Si el campo <code>DB_PASSWORD</code> contiene <code>••••••</code>, se conserva la contraseña actual sin sobrescribirla.</p>
+  <p>Respuesta: <code>{"ok": true, "requiere_reinicio": true, "mensaje": "..."}</code></p>
+  <div class="callout callout-warn">
+    <strong>Requiere reinicio</strong> Los cambios en <code>config.py</code> se reflejan en el archivo de disco inmediatamente, pero la app en memoria sigue usando los valores cargados al arrancar. Es necesario reiniciar el proceso de Python para que tomen efecto.
+  </div>
+
+  <h3 class="sub">Probar conexión a BD</h3>
+  <div class="endpoint"><span class="method get">GET</span>/api/db/test</div>
+  <p>Ejecuta <code>SELECT @@VERSION</code> contra SQL Server y devuelve <code>{"ok": true/false, "mensaje": "..."}</code>.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- API INFORMES -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-api-informes">
+  <span class="section-badge badge-api">API REST</span>
+  <h1 class="section-title">API — Informes estadísticos</h1>
+  <p class="section-lead">Endpoints de datos para el dashboard de informes. Todos aceptan el parámetro <code>?dias=N</code> (por defecto 30).</p>
+
+  <table class="doc-table">
+    <thead><tr><th>Endpoint</th><th>Parámetros</th><th>Descripción</th></tr></thead>
+    <tbody>
+      <tr><td>GET /api/informes/kpis_generales</td><td>—</td><td>Totales históricos: lecturas totales, tags únicos, antenas activas, primera y última lectura, lecturas del día actual.</td></tr>
+      <tr><td>GET /api/informes/resumen_diario</td><td>dias (default 30)</td><td>Lecturas y tags únicos agrupados por día para el período. Orden ascendente por fecha.</td></tr>
+      <tr><td>GET /api/informes/por_antena</td><td>dias (default 30)</td><td>Totales de lecturas y tags únicos agrupados por antena, ordenados por lecturas descendente.</td></tr>
+      <tr><td>GET /api/informes/por_hora</td><td>dias (default 7)</td><td>Distribución de lecturas por hora del día (0-23) para detectar horarios pico.</td></tr>
+      <tr><td>GET /api/informes/resumen_mensual</td><td>—</td><td>Lecturas y tags únicos agrupados por mes (últimos 12 meses). Útil para evolución anual.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">Ejemplo de respuesta — /api/informes/resumen_diario</h3>
+  <pre><code>{
+  "ok": true,
+  "datos": [
+    {"fecha": "2026-06-01", "lecturas": 1423, "tags_unicos": 87},
+    {"fecha": "2026-06-02", "lecturas": 980, "tags_unicos": 64},
+    ...
+  ]
+}</code></pre>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- API SISTEMA -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-api-sistema">
+  <span class="section-badge badge-api">API REST</span>
+  <h1 class="section-title">API — Sistema y utilidades</h1>
+
+  <table class="doc-table">
+    <thead><tr><th>Endpoint</th><th>Descripción</th></tr></thead>
+    <tbody>
+      <tr><td>GET /</td><td>Panel en vivo (<code>index.html</code>)</td></tr>
+      <tr><td>GET /configuracion</td><td>Página de configuración (<code>configuracion.html</code>)</td></tr>
+      <tr><td>GET /informes</td><td>Dashboard estadístico (<code>informes.html</code>)</td></tr>
+      <tr><td>GET /docs</td><td>Esta documentación (<code>docs.html</code>). Sin enlace desde la UI.</td></tr>
+    </tbody>
+  </table>
+
+  <h3 class="sub">Manejo de errores HTTP</h3>
+  <p>Todas las rutas <code>404 Not Found</code> devuelven JSON en lugar de la página de error de Flask:</p>
+  <pre><code>{"ok": false, "error": "Ruta no encontrada: /api/ruta-inexistente"}</code></pre>
+  <p>Esto garantiza que el frontend siempre reciba JSON parseable, aunque la URL esté mal formada.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- FRONTEND OVERVIEW -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-fe-overview">
+  <span class="section-badge badge-frontend">Frontend</span>
+  <h1 class="section-title">Estructura de páginas</h1>
+  <p class="section-lead">Todas las páginas comparten <code>style.css</code> (tema oscuro unificado) y usan la misma barra de navegación superior.</p>
+
+  <table class="doc-table">
+    <thead><tr><th>Archivo</th><th>URL</th><th>JS asociado</th><th>Propósito</th></tr></thead>
+    <tbody>
+      <tr><td>index.html</td><td>/</td><td>app.js</td><td>Panel de monitoreo en tiempo real: KPIs, tarjetas por reader, tabla de lecturas en vivo.</td></tr>
+      <tr><td>configuracion.html</td><td>/configuracion</td><td>configuracion.js</td><td>Pestaña "Readers y antenas": CRUD de readers y antenas. Pestaña "Sistema": todos los parámetros de config.py con tooltips.</td></tr>
+      <tr><td>informes.html</td><td>/informes</td><td>informes.js</td><td>Dashboard gerencial: KPIs históricos, gráficos de tendencia diaria, distribución horaria, ranking por antena, evolución mensual.</td></tr>
+      <tr><td>docs.html</td><td>/docs</td><td>inline</td><td>Esta documentación. SPA con sidebar y navegación sin recarga.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="sub">configuracion.js — patrón de event delegation</h2>
+  <p>Los botones de "+ Antena", "Editar" y "Eliminar" dentro de las tarjetas de readers se generan dinámicamente con <code>innerHTML</code>. Para evitar el bug clásico de <code>onclick</code> inline con closures rotos, se usa <strong>event delegation</strong>: los listeners se registran con <code>addEventListener</code> sobre cada botón después de cada llamada a <code>renderReaders()</code>:</p>
+  <pre><code>listaContainer.querySelectorAll(".btn-add-antena").forEach(btn => {
+  btn.addEventListener("click", () => abrirModalAntena(parseInt(btn.dataset.readerId)));
+});</code></pre>
+  <p>El <code>readerId</code> se pasa como atributo <code>data-reader-id</code> en el HTML generado, no interpolado en el <code>onclick</code>.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- WEBSOCKET -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-fe-websocket">
+  <span class="section-badge badge-frontend">Frontend</span>
+  <h1 class="section-title">WebSocket / SocketIO</h1>
+  <p class="section-lead">El panel en vivo usa Socket.IO para recibir eventos del servidor sin polling. La conexión se establece automáticamente al cargar la página.</p>
+
+  <h2 class="sub">Eventos emitidos por el servidor</h2>
+  <table class="doc-table">
+    <thead><tr><th>Evento</th><th>Cuándo</th><th>Payload</th></tr></thead>
+    <tbody>
+      <tr><td>estado_inicial</td><td>Al conectarse un cliente nuevo</td><td><code>{"kpis": {...}, "eventos_recientes": [...]}</code> — precarga el estado actual sin esperar el próximo tag</td></tr>
+      <tr><td>evento_lectura</td><td>Cada vez que un reader detecta un tag</td><td><code>{"epc_hex", "epc_ascii", "reader_id", "reader_nombre", "antena_id", "antena_nombre", "rssi", "timestamp"}</code></td></tr>
+      <tr><td>kpis_actualizados</td><td>Después de cada lectura</td><td>Mismo shape que <code>estado_inicial.kpis</code> — contadores actualizados</td></tr>
+      <tr><td>estado_reader</td><td>Cambio de estado de cualquier reader</td><td><code>{"reader_id", "nombre", "estado", "detalle"}</code></td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="sub">Modo de transporte</h2>
+  <p>Flask-SocketIO usa <code>async_mode="threading"</code>. Socket.IO negocia automáticamente entre WebSocket puro y long-polling HTTP. Los <code>socketio.emit()</code> realizados desde hilos de background (hilos de reader) funcionan correctamente con este modo.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- CHARTS -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-fe-charts">
+  <span class="section-badge badge-frontend">Frontend</span>
+  <h1 class="section-title">Gráficos (Chart.js 4.4)</h1>
+  <p class="section-lead">El dashboard de informes usa Chart.js cargado desde CDN. Los gráficos se destruyen y recrean al cambiar el período, evitando memory leaks.</p>
+
+  <table class="doc-table">
+    <thead><tr><th>Gráfico</th><th>Tipo</th><th>Datos</th></tr></thead>
+    <tbody>
+      <tr><td>Lecturas por día</td><td>Bar + Line (doble eje)</td><td>Barras = lecturas totales / Línea = tags únicos</td></tr>
+      <tr><td>Distribución por hora</td><td>Bar</td><td>Lecturas por hora del día (0-23), barra del pico en ámbar</td></tr>
+      <tr><td>Lecturas por antena</td><td>Doughnut</td><td>Porcentaje de lecturas por antena</td></tr>
+      <tr><td>Evolución mensual</td><td>Line (doble eje)</td><td>Lecturas y tags únicos por mes, últimos 12 meses</td></tr>
+    </tbody>
+  </table>
+
+  <p>Los canvas tienen altura fija de 240px via CSS (<code>.chart-wrap { height: 240px; }</code>) con <code>maintainAspectRatio: false</code> en Chart.js para evitar deformaciones en responsive.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- OPS THREADS -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-ops-threads">
+  <span class="section-badge badge-ops">Operación</span>
+  <h1 class="section-title">Hilos del sistema</h1>
+
+  <div class="thread-row"><span class="thread-name">MainThread</span><span class="thread-role">Servidor Flask — requests HTTP y eventos WebSocket</span></div>
+  <div class="thread-row"><span class="thread-name">reader-{reader_id}</span><span class="thread-role">Un hilo por reader activo. Loop de conexión LLRP con reintento automático cada 5 s.</span></div>
+  <div class="thread-row"><span class="thread-name">recarga-config-readers</span><span class="thread-role">Consulta BD cada <code>INTERVALO_RECARGA_CONFIG_SEGUNDOS</code> segundos para detectar cambios de readers/antenas.</span></div>
+  <div class="thread-row"><span class="thread-name">buffer-lecturas-flush</span><span class="thread-role">Vuelca el buffer de lecturas a SQL Server en lotes periódicos.</span></div>
+  <div class="thread-row"><span class="thread-name">heartbeat</span><span class="thread-role">Imprime en log el estado del sistema cada 15 s.</span></div>
+
+  <p style="margin-top:1rem">Todos los hilos son <strong>daemon threads</strong> (excepto MainThread), lo que significa que se terminan automáticamente al cerrar el proceso principal sin necesidad de señales explícitas.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- OPS BUFFER -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-ops-buffer">
+  <span class="section-badge badge-ops">Operación</span>
+  <h1 class="section-title">Buffer de lecturas</h1>
+  <p>El buffer desacopla la recepción de lecturas (producida en los hilos de reader, a alta frecuencia) de la escritura a BD (costosa, operación de red).</p>
+
+  <h2 class="sub">Ciclo de vida de una lectura</h2>
+  <pre><code>reader detecta tag
+  → on_tag_report() en hilo reader-{id}
+  → buffer_lecturas.agregar()                  ← O(1), thread-safe
+  → buffer-lecturas-flush cada N segundos
+  → cursor.fast_executemany() → SQL Server      ← bulk insert</code></pre>
+
+  <h2 class="sub">Comportamiento ante caída de SQL Server</h2>
+  <ol>
+    <li>El flush falla → el lote se re-encola al inicio del buffer (LIFO).</li>
+    <li>Las lecturas siguen entrando mientras el buffer tenga capacidad.</li>
+    <li>Si el buffer llega a <code>TAMANO_MAXIMO_BUFFER</code>, se descartan las lecturas más antiguas.</li>
+    <li>Cuando SQL Server vuelve, el próximo flush inserta el lote acumulado.</li>
+  </ol>
+  <p>El estado de error del último flush es visible en el panel de KPIs (indicador "Pendientes de guardar en BD") y en la propiedad <code>buffer_lecturas.ultimo_error</code>.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- OPS LLRP -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-ops-llrp">
+  <span class="section-badge badge-ops">Operación</span>
+  <h1 class="section-title">Protocolo LLRP</h1>
+  <p>LLRP (Low Level Reader Protocol, ISO 24971-5) es el protocolo estándar para comunicación entre software y lectores RFID. La plataforma usa la librería <a href="https://github.com/ransford/sllurp" target="_blank">sllurp</a> v3.0.5.</p>
+
+  <h2 class="sub">Parámetros del ROSpec</h2>
+  <p>Al conectar, se envía al reader un <em>ROSpec</em> (Reader Operation Spec) que define qué inventariar y cómo reportar:</p>
+  <pre><code>antennas = [1, 2, ...]          # puertos físicos activos
+session  = 2                    # sesión Gen2
+tag_population = 4              # estimación para calibrar Q del anticollision
+report_every_n_tags = 1         # ← crítico: reporte inmediato por cada tag
+reset_on_connect = True         # limpia ROSpecs anteriores al conectar
+reconnect = False               # el reintento lo maneja iniciar_en_hilo()</code></pre>
+
+  <h2 class="sub">Tag Content Selector</h2>
+  <p>Solo se solicitan los campos necesarios para minimizar el tráfico de red:</p>
+  <table class="doc-table">
+    <thead><tr><th>Campo</th><th>Habilitado</th><th>Propósito</th></tr></thead>
+    <tbody>
+      <tr><td>AntennaID</td><td>✓</td><td>Saber qué antena leyó el tag (para resolver antena_id en BD)</td></tr>
+      <tr><td>PeakRSSI</td><td>✓</td><td>Potencia de señal (diagnóstico y calidad de cobertura)</td></tr>
+      <tr><td>LastSeenTimestampUTC</td><td>✓</td><td>Timestamp preciso del reader</td></tr>
+      <tr><td>TagSeenCount</td><td>✓</td><td>Veces vista en la ráfaga actual</td></tr>
+    </tbody>
+  </table>
+
+  <div class="callout callout-danger">
+    <strong>report_every_n_tags: por qué es crítico</strong> Con el valor por defecto de sllurp (<code>None</code> → N=0), el trigger de reporte LLRP queda en <em>"al final del AISpec"</em>. En inventario continuo el AISpec nunca termina, así que el reader <strong>nunca emite reportes</strong> aunque esté detectando tags físicamente (se puede ver actividad en los LEDs del reader). Este bug fue detectado y resuelto durante el desarrollo; el valor siempre se fuerza a 1.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- TROUBLESHOOTING -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-ops-troubleshoot">
+  <span class="section-badge badge-ops">Operación</span>
+  <h1 class="section-title">Troubleshooting</h1>
+
+  <h3 class="sub">La app no conecta a SQL Server</h3>
+  <ol>
+    <li>Correr <code>python diagnostico_sql.py</code> — lista los drivers ODBC instalados y muestra el mensaje de error exacto.</li>
+    <li>Verificar que <code>DB_DRIVER</code> en <code>config.py</code> coincide exactamente con uno de los drivers listados.</li>
+    <li>Verificar <code>DB_SERVER</code>: para instancias con nombre usar <code>SERVIDOR\INSTANCIA</code> (doble barra en el archivo Python: <code>"GEN01\\SQL"</code>).</li>
+    <li>Verificar que <code>sql/schema.sql</code> fue ejecutado contra la base indicada en <code>DB_DATABASE</code>.</li>
+  </ol>
+
+  <h3 class="sub">Un reader no conecta (estado rojo en el panel)</h3>
+  <ol>
+    <li>Verificar conectividad de red: <code>ping {IP_DEL_READER}</code></li>
+    <li>Verificar que el puerto 5084 está accesible: <code>Test-NetConnection -ComputerName {IP} -Port 5084</code> (PowerShell)</li>
+    <li>Asegurarse de que no hay otra sesión LLRP activa conectada al reader (LLRP admite una sola conexión simultánea).</li>
+    <li>Correr <code>python diagnostico_llrp.py</code> editando la IP al inicio del archivo — conecta directamente sin Flask.</li>
+  </ol>
+
+  <h3 class="sub">El reader conecta pero no llegan lecturas al panel</h3>
+  <ol>
+    <li>Verificar en el log de consola que aparece <code>starting inventory</code> y luego <code>Tag leído: epc=...</code>.</li>
+    <li>Si el log de heartbeat muestra <code>lecturas_totales=0</code> con el reader conectado, el problema está en LLRP.</li>
+    <li>Confirmar que <code>REPORT_EVERY_N_TAGS = 1</code> en <code>config.py</code> (no 0).</li>
+    <li>Confirmar que las antenas configuradas en BD tienen el <code>PuertoFisico</code> correcto (1, 2, 3, 4) y están físicamente conectadas al reader.</li>
+  </ol>
+
+  <h3 class="sub">El modal de antena se abre solo o no cierra</h3>
+  <p>Causa conocida y resuelta: la clase CSS <code>.modal-overlay</code> tiene <code>display: flex</code>, que pisa el <code>display: none</code> implícito del atributo HTML <code>hidden</code>. Solución: agregar en <code>style.css</code>:</p>
+  <pre><code>.modal-overlay[hidden] { display: none !important; }</code></pre>
+
+  <h3 class="sub">Las lecturas no se guardan en la BD (pendientes en buffer)</h3>
+  <ol>
+    <li>Verificar el indicador "Pendientes de guardar" en el panel — si crece continuamente hay un problema de escritura.</li>
+    <li>Revisar logs de consola — el hilo <code>buffer-lecturas-flush</code> loguea los errores de INSERT.</li>
+    <li>El buffer puede acumular hasta <code>TAMANO_MAXIMO_BUFFER</code> lecturas antes de descartar. Aumentarlo en <code>config.py</code> si se esperan cortes prolongados de BD.</li>
+  </ol>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- DIAG -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-ops-diag">
+  <span class="section-badge badge-ops">Operación</span>
+  <h1 class="section-title">Scripts de diagnóstico</h1>
+
+  <h2 class="sub">diagnostico_sql.py</h2>
+  <p>Prueba la conexión a SQL Server de forma aislada, sin Flask.</p>
+  <pre><code>cd app
+python diagnostico_sql.py</code></pre>
+  <p>Muestra: driver ODBC configurado, servidor, base de datos, drivers ODBC instalados en el sistema, resultado de la conexión (<code>SELECT @@VERSION</code>), y lista de readers activos en la BD.</p>
+
+  <h2 class="sub">diagnostico_llrp.py</h2>
+  <p>Prueba la conexión a un reader RFID de forma aislada, sin Flask ni BD.</p>
+  <pre><code>cd app
+python diagnostico_llrp.py</code></pre>
+  <p>Editar <code>READER_IP</code> y <code>ANTENAS</code> al inicio del archivo. Conecta directamente al reader, arranca inventario, espera 40 segundos e imprime cada tag leído con su antena y RSSI. Al final reporta cuántas lecturas llegaron <em>después</em> del inicio del ROSpec (pre-start vs post-start), para distinguir lecturas reales de residuos de sesiones anteriores.</p>
+</section>
+
+</main><!-- /main -->
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- SCRIPT -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<script>
+// ── Navegación ────────────────────────────────────────────────────────
+const links = document.querySelectorAll(".sidebar-link[data-section]");
+const sections = document.querySelectorAll(".section");
+
+function showSection(id) {
+  sections.forEach(s => s.classList.toggle("visible", s.id === "section-" + id));
+  links.forEach(l => l.classList.toggle("active", l.dataset.section === id));
+  window.scrollTo(0, 0);
+}
+
+links.forEach(link => {
+  link.addEventListener("click", () => showSection(link.dataset.section));
+});
+
+// ── Búsqueda ──────────────────────────────────────────────────────────
+const searchInput = document.getElementById("search-input");
+
+function clearHighlights() {
+  document.querySelectorAll(".highlight").forEach(el => {
+    el.replaceWith(document.createTextNode(el.textContent));
+  });
+  document.querySelectorAll("section.section").forEach(s => s.style.display = "");
+}
+
+function highlightText(node, query) {
+  if (node.nodeType === 3) {
+    const idx = node.textContent.toLowerCase().indexOf(query);
+    if (idx === -1) return null;
+    const range = document.createRange();
+    range.setStart(node, idx);
+    range.setEnd(node, idx + query.length);
+    const mark = document.createElement("mark");
+    mark.className = "highlight";
+    range.surroundContents(mark);
+    return mark;
+  }
+  return null;
+}
+
+searchInput.addEventListener("input", () => {
+  clearHighlights();
+  const q = searchInput.value.trim().toLowerCase();
+  if (q.length < 3) {
+    sections.forEach(s => {
+      const wasVisible = s.classList.contains("visible");
+      if (!wasVisible) s.style.display = "none";
+    });
+    return;
+  }
+
+  let firstMatch = null;
+  sections.forEach(s => {
+    const text = s.textContent.toLowerCase();
+    if (text.includes(q)) {
+      s.style.display = "block";
+      if (!firstMatch) { firstMatch = s.id.replace("section-", ""); }
+    } else {
+      s.style.display = "none";
+    }
+  });
+
+  if (firstMatch) showSection(firstMatch);
+});
+
+searchInput.addEventListener("keydown", e => {
+  if (e.key === "Escape") {
+    searchInput.value = "";
+    clearHighlights();
+    showSection("overview");
+  }
+});
+
+// ── Activar primera sección ───────────────────────────────────────────
+showSection("overview");
+</script>
+</body>
+</html>

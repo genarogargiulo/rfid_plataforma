@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Informes — Panel RFID</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-brand">
+    <span class="brand-mark">RFID</span>
+    <div class="brand-text">
+      <h1>Plataforma de trazabilidad RFID</h1>
+      <span class="brand-sub">Informes estadísticos</span>
+    </div>
+  </div>
+  <nav class="topbar-nav">
+    <a href="/" class="nav-link">Panel en vivo</a>
+    <a href="/informes" class="nav-link active">Informes</a>
+    <a href="/configuracion" class="nav-link">Configuración</a>
+  </nav>
+</header>
+
+<main class="layout">
+
+  <!-- KPIs gerenciales -->
+  <section class="kpi-row" id="kpi-gerencial">
+    <div class="kpi-card">
+      <span class="kpi-label">Lecturas hoy</span>
+      <span class="kpi-value" id="kpi-hoy">—</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-label">Tags únicos totales</span>
+      <span class="kpi-value" id="kpi-tags-total">—</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-label">Total lecturas históricas</span>
+      <span class="kpi-value" id="kpi-lecturas-total">—</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-label">Antenas activas</span>
+      <span class="kpi-value" id="kpi-antenas">—</span>
+    </div>
+    <div class="kpi-card">
+      <span class="kpi-label">Primera lectura registrada</span>
+      <span class="kpi-value kpi-value--small" id="kpi-primera">—</span>
+    </div>
+  </section>
+
+  <!-- Selector de período -->
+  <section class="periodo-bar">
+    <span class="periodo-label">Período:</span>
+    <div class="periodo-btns">
+      <button class="periodo-btn" data-dias="7">7 días</button>
+      <button class="periodo-btn active" data-dias="30">30 días</button>
+      <button class="periodo-btn" data-dias="90">90 días</button>
+      <button class="periodo-btn" data-dias="365">12 meses</button>
+    </div>
+    <button class="btn-secondary" id="btn-actualizar" style="margin-left:auto">↻ Actualizar</button>
+  </section>
+
+  <!-- Fila superior: tendencia diaria + distribución por hora -->
+  <div class="charts-row-2">
+
+    <div class="chart-card chart-card-wide">
+      <div class="chart-card-header">
+        <h3>Lecturas por día</h3>
+        <span class="chart-sub" id="sub-diario">últimos 30 días</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-diario"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <h3>Distribución por hora del día</h3>
+        <span class="chart-sub" id="sub-hora">últimos 7 días</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-hora"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Fila inferior: por antena + mensual -->
+  <div class="charts-row-2">
+
+    <div class="chart-card">
+      <div class="chart-card-header">
+        <h3>Lecturas por antena</h3>
+        <span class="chart-sub" id="sub-antena">período seleccionado</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-antena"></canvas>
+      </div>
+    </div>
+
+    <div class="chart-card chart-card-wide">
+      <div class="chart-card-header">
+        <h3>Evolución mensual</h3>
+        <span class="chart-sub">últimos 12 meses</span>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="chart-mensual"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Tabla resumen por antena -->
+  <section class="eventos-panel">
+    <div class="eventos-header">
+      <h2>Detalle por antena</h2>
+      <span class="eventos-sub" id="sub-tabla">período seleccionado</span>
+    </div>
+    <div class="tabla-scroll">
+      <table class="tabla-eventos">
+        <thead>
+          <tr>
+            <th>Antena</th>
+            <th>Reader</th>
+            <th>Lecturas</th>
+            <th>Tags únicos</th>
+            <th>% del total</th>
+          </tr>
+        </thead>
+        <tbody id="tbody-antenas">
+          <tr class="fila-vacia"><td colspan="5">Cargando datos...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer-note">
+  Plataforma RFID — TECSIDEL
+</footer>
+
+<script src="{{ url_for('static', filename='informes.js') }}"></script>
+</body>
+</html>
