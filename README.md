@@ -1,8 +1,8 @@
-# Plataforma RFID — FPT Córdoba
+# Plataforma RFID — .......
 
 Plataforma multi-reader para trazabilidad de pallets vía RFID. Se conecta
 a N readers Impinj (u otros compatibles LLRP), decodifica cada lectura, y
-la guarda en SQL Server para que el cliente (FPT) la explote directamente
+la guarda en SQL Server para que el cliente ....... la explote directamente
 con consultas SQL o Power BI, sin pasar por la aplicación.
 
 Basada en los requerimientos relevados con el cliente:
@@ -52,11 +52,11 @@ arrancar es **SQL Server Express** (gratuito):
 
 1. Abrir SSMS y conectarse al servidor (`localhost\SQLEXPRESS` si usaste
    el nombre default de instancia).
-2. Crear una base de datos vacía llamada `RFID_FPT`:
+2. Crear una base de datos vacía llamada `RFID_.......`:
    ```sql
-   CREATE DATABASE RFID_FPT;
+   CREATE DATABASE RFID_.......;
    ```
-3. Abrir `sql/schema.sql` en SSMS, seleccionar `RFID_FPT` como base de
+3. Abrir `sql/schema.sql` en SSMS, seleccionar `RFID_.......` como base de
    datos activa, y ejecutar todo el script (F5). Esto crea las tablas
    `Readers`, `Antenas`, `LecturasRFID`, `LogEstadoReaders`, y las vistas
    `vw_Lecturas`, `vw_ResumenDiarioPorAntena`, `vw_UltimaLecturaPorTag`.
@@ -89,7 +89,7 @@ Editar `app/core/config.py`:
 ```python
 DB_DRIVER = "ODBC Driver 17 for SQL Server"   # el que confirmaste en el paso 4
 DB_SERVER = "localhost\\SQLEXPRESS"            # o el nombre real de tu instancia
-DB_DATABASE = "RFID_FPT"
+DB_DATABASE = "RFID_......."
 DB_TRUSTED_CONNECTION = True                   # usa la sesión de Windows actual
 ```
 
@@ -127,7 +127,7 @@ vivo (vacío al principio) y un link a **Configuración**.
 
 1. Ir a `http://localhost:5000/configuracion`.
 2. Click en "+ Nuevo reader". Completar:
-   - Nombre: texto libre, ej. "Reader Expedición FPT"
+   - Nombre: texto libre, ej. "Reader Expedición ......."
    - Dirección IP: la IP real del reader en la red de planta
    - Puerto: 5084 (no cambiar salvo caso especial)
    - Modelo / Ubicación: texto libre, informativo
@@ -149,7 +149,7 @@ antena de origen.
 
 ## 9. Explotación de datos (Power BI / SQL directo)
 
-El cliente puede conectarse directamente a la base `RFID_FPT` desde
+El cliente puede conectarse directamente a la base `RFID_.......` desde
 Power BI (conector "SQL Server") o cualquier herramienta de BI, usando
 las vistas ya preparadas:
 
