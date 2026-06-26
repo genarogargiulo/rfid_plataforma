@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Usuarios — Panel RFID</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-brand">
+    <span class="brand-mark">RFID</span>
+    <div class="brand-text">
+      <h1>Plataforma de trazabilidad RFID</h1>
+      <span class="brand-sub">Gestión de usuarios</span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <nav class="topbar-nav">
+      <a href="/" class="nav-link">Panel en vivo</a>
+      <a href="/informes" class="nav-link">Informes</a>
+      <a href="/configuracion" class="nav-link">Configuración</a>
+      <a href="/usuarios" class="nav-link active">Usuarios</a>
+    </nav>
+    <div class="topbar-user">
+      <span class="topbar-username">{{ current_user.nombre }}</span>
+      <a href="/logout" class="nav-link nav-link--logout">Salir</a>
+    </div>
+  </div>
+</header>
+
+<main class="layout">
+
+  <div id="usuarios-banner" class="sistema-save-banner hidden"></div>
+
+  <div class="config-header">
+    <div>
+      <h2>Usuarios del sistema</h2>
+      <span class="eventos-sub">Administrá el acceso de cada usuario a la plataforma</span>
+    </div>
+    <button class="btn-primary" id="btn-nuevo-usuario">+ Nuevo usuario</button>
+  </div>
+
+  <section class="usuarios-tabla-wrap">
+    <table class="tabla-eventos tabla-usuarios">
+      <thead>
+        <tr>
+          <th>Nombre</th>
+          <th>Email</th>
+          <th>Rol</th>
+          <th>Estado</th>
+          <th>Último acceso</th>
+          <th>Acciones</th>
+        </tr>
+      </thead>
+      <tbody id="tabla-usuarios-body">
+        <tr class="fila-vacia"><td colspan="6">Cargando...</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- Leyenda de roles -->
+  <div class="config-group" style="margin-top:1.5rem">
+    <h3 class="config-group-title">Roles disponibles</h3>
+    <div class="roles-descripcion">
+      <div class="rol-item">
+        <span class="rol-badge rol-admin">admin</span>
+        <span>Acceso completo: panel en vivo, informes, configuración de readers y antenas, gestión de usuarios.</span>
+      </div>
+      <div class="rol-item">
+        <span class="rol-badge rol-usuario">usuario</span>
+        <span>Acceso restringido: solo panel en vivo e informes. Sin acceso a configuración ni gestión de usuarios.</span>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<!-- Modal: alta / edición de usuario -->
+<div class="modal-overlay" id="modal-usuario" hidden>
+  <div class="modal-box">
+    <h3 id="modal-usuario-titulo">Nuevo usuario</h3>
+    <form id="form-usuario">
+      <input type="hidden" id="usuario-id-edit" value="">
+
+      <label>Nombre completo
+        <input type="text" id="usuario-nombre" placeholder="Juan Pérez" required>
+      </label>
+
+      <label>Email
+        <input type="email" id="usuario-email" placeholder="usuario@empresa.com" required>
+      </label>
+
+      <label>Rol
+        <select id="usuario-rol">
+          <option value="usuario">usuario — solo panel e informes</option>
+          <option value="admin">admin — acceso completo</option>
+        </select>
+      </label>
+
+      <label class="config-label config-label-check" id="usuario-activo-label">
+        <input type="checkbox" id="usuario-activo" checked>
+        <span>Usuario activo</span>
+      </label>
+
+      <div id="usuario-password-section">
+        <label>Contraseña <span id="usuario-password-hint">(mínimo 6 caracteres)</span>
+          <input type="password" id="usuario-password" placeholder="Mínimo 6 caracteres">
+        </label>
+        <label id="usuario-password-confirm-label">Confirmar contraseña
+          <input type="password" id="usuario-password-confirm" placeholder="Repetir contraseña">
+        </label>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="btn-cancelar-usuario">Cancelar</button>
+        <button type="submit" class="btn-primary" id="btn-guardar-usuario">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: cambio de contraseña -->
+<div class="modal-overlay" id="modal-password" hidden>
+  <div class="modal-box">
+    <h3>Cambiar contraseña</h3>
+    <p id="modal-password-nombre" style="margin-bottom:.75rem;color:var(--text-muted)"></p>
+    <form id="form-password">
+      <input type="hidden" id="password-usuario-id" value="">
+      <label>Nueva contraseña
+        <input type="password" id="nueva-password" placeholder="Mínimo 6 caracteres" required>
+      </label>
+      <label>Confirmar contraseña
+        <input type="password" id="confirmar-password" placeholder="Repetir contraseña" required>
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" id="btn-cancelar-password">Cancelar</button>
+        <button type="submit" class="btn-primary">Cambiar contraseña</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<footer class="footer-note">
+  Plataforma RFID
+</footer>
+
+<script>
+const MI_ID = {{ current_user.usuario_id }};
+
+let usuariosData = [];
+
+// ── Carga inicial ─────────────────────────────────────────────────────────────
+
+async function cargarUsuarios() {
+  const res = await fetch('/api/usuarios');
+  const data = await res.json();
+  if (!data.ok) { mostrarBanner('Error al cargar usuarios: ' + data.error, true); return; }
+  usuariosData = data.usuarios;
+  renderTabla(usuariosData);
+}
+
+function renderTabla(lista) {
+  const tbody = document.getElementById('tabla-usuarios-body');
+  if (!lista.length) {
+    tbody.innerHTML = '<tr class="fila-vacia"><td colspan="6">No hay usuarios.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = lista.map(u => {
+    const rolBadge = `<span class="rol-badge rol-${u.rol}">${u.rol}</span>`;
+    const estadoBadge = u.activo
+      ? '<span class="estado-badge estado-activo">activo</span>'
+      : '<span class="estado-badge estado-inactivo">inactivo</span>';
+    const ultimoAcceso = u.ultimo_acceso
+      ? new Date(u.ultimo_acceso).toLocaleString('es-AR', {dateStyle:'short', timeStyle:'short'})
+      : '<span style="color:var(--text-muted)">Nunca</span>';
+    const esMio = u.usuario_id === MI_ID;
+    return `
+      <tr class="${u.activo ? '' : 'fila-inactiva'}">
+        <td>${u.nombre}${esMio ? ' <span class="yo-badge">(vos)</span>' : ''}</td>
+        <td>${u.email}</td>
+        <td>${rolBadge}</td>
+        <td>${estadoBadge}</td>
+        <td>${ultimoAcceso}</td>
+        <td class="acciones-col">
+          <button class="btn-table btn-edit" onclick="abrirEditar(${u.usuario_id})">Editar</button>
+          <button class="btn-table btn-pwd" onclick="abrirCambiarPassword(${u.usuario_id}, '${u.nombre.replace(/'/g,"\\'")}')">Contraseña</button>
+        </td>
+      </tr>`;
+  }).join('');
+}
+
+// ── Modal nuevo usuario ───────────────────────────────────────────────────────
+
+document.getElementById('btn-nuevo-usuario').addEventListener('click', () => {
+  document.getElementById('modal-usuario-titulo').textContent = 'Nuevo usuario';
+  document.getElementById('usuario-id-edit').value = '';
+  document.getElementById('form-usuario').reset();
+  document.getElementById('usuario-activo-label').style.display = 'none';
+  document.getElementById('usuario-password-hint').textContent = '(mínimo 6 caracteres)';
+  document.getElementById('usuario-password-confirm-label').style.display = '';
+  document.getElementById('usuario-password').required = true;
+  document.getElementById('usuario-password-confirm').required = true;
+  document.getElementById('modal-usuario').hidden = false;
+});
+
+function abrirEditar(id) {
+  const u = usuariosData.find(x => x.usuario_id === id);
+  if (!u) return;
+  document.getElementById('modal-usuario-titulo').textContent = 'Editar usuario';
+  document.getElementById('usuario-id-edit').value = id;
+  document.getElementById('usuario-nombre').value = u.nombre;
+  document.getElementById('usuario-email').value = u.email;
+  document.getElementById('usuario-rol').value = u.rol;
+  document.getElementById('usuario-activo').checked = u.activo;
+  document.getElementById('usuario-activo-label').style.display = '';
+  // En edición la contraseña se cambia desde el botón dedicado
+  document.getElementById('usuario-password-section').style.display = 'none';
+  document.getElementById('usuario-password').required = false;
+  document.getElementById('usuario-password-confirm').required = false;
+  document.getElementById('modal-usuario').hidden = false;
+}
+
+document.getElementById('btn-cancelar-usuario').addEventListener('click', () => {
+  document.getElementById('modal-usuario').hidden = true;
+  document.getElementById('usuario-password-section').style.display = '';
+});
+
+document.getElementById('form-usuario').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('usuario-id-edit').value;
+  const nombre = document.getElementById('usuario-nombre').value.trim();
+  const email = document.getElementById('usuario-email').value.trim();
+  const rol = document.getElementById('usuario-rol').value;
+  const activo = document.getElementById('usuario-activo').checked;
+  const password = document.getElementById('usuario-password').value;
+  const confirm = document.getElementById('usuario-password-confirm').value;
+
+  if (!id) {
+    // Alta nueva
+    if (password !== confirm) { mostrarBanner('Las contraseñas no coinciden.', true); return; }
+    const res = await fetch('/api/usuarios', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ nombre, email, rol, password }),
+    });
+    const data = await res.json();
+    if (!data.ok) { mostrarBanner('Error: ' + data.error, true); return; }
+    mostrarBanner('Usuario creado correctamente.');
+  } else {
+    // Edición
+    const res = await fetch(`/api/usuarios/${id}`, {
+      method: 'PUT',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ nombre, email, rol, activo }),
+    });
+    const data = await res.json();
+    if (!data.ok) { mostrarBanner('Error: ' + data.error, true); return; }
+    mostrarBanner('Usuario actualizado.');
+  }
+
+  document.getElementById('modal-usuario').hidden = true;
+  document.getElementById('usuario-password-section').style.display = '';
+  cargarUsuarios();
+});
+
+// ── Modal cambio de contraseña ────────────────────────────────────────────────
+
+function abrirCambiarPassword(id, nombre) {
+  document.getElementById('password-usuario-id').value = id;
+  document.getElementById('modal-password-nombre').textContent = nombre;
+  document.getElementById('form-password').reset();
+  document.getElementById('modal-password').hidden = false;
+}
+
+document.getElementById('btn-cancelar-password').addEventListener('click', () => {
+  document.getElementById('modal-password').hidden = true;
+});
+
+document.getElementById('form-password').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const id = document.getElementById('password-usuario-id').value;
+  const password = document.getElementById('nueva-password').value;
+  const confirm = document.getElementById('confirmar-password').value;
+  if (password !== confirm) { mostrarBanner('Las contraseñas no coinciden.', true); return; }
+  const res = await fetch(`/api/usuarios/${id}/password`, {
+    method: 'PUT',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ password }),
+  });
+  const data = await res.json();
+  if (!data.ok) { mostrarBanner('Error: ' + data.error, true); return; }
+  mostrarBanner('Contraseña cambiada correctamente.');
+  document.getElementById('modal-password').hidden = true;
+});
+
+// ── Cerrar modales al hacer clic fuera ────────────────────────────────────────
+
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) {
+      overlay.hidden = true;
+      document.getElementById('usuario-password-section').style.display = '';
+    }
+  });
+});
+
+// ── Banner de feedback ────────────────────────────────────────────────────────
+
+function mostrarBanner(msg, esError = false) {
+  const b = document.getElementById('usuarios-banner');
+  b.textContent = msg;
+  b.className = 'sistema-save-banner' + (esError ? ' banner-error' : '');
+  b.classList.remove('hidden');
+  setTimeout(() => b.classList.add('hidden'), 4000);
+}
+
+// ── Inicio ────────────────────────────────────────────────────────────────────
+
+cargarUsuarios();
+</script>
+
+</body>
+</html>

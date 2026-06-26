@@ -3,7 +3,7 @@ epc_decoder.py — Utilidades para decodificar el EPC crudo que entrega el
 reader (bytes / hex) a representaciones útiles para guardar y explotar:
   - Hex (siempre disponible, formato canónico para joins/filtros)
   - ASCII (si el contenido del tag fue programado como texto legible,
-    como se observó en las pruebas de campo con los tags FPT)
+    como se observó en las pruebas de campo con los tags)
 
 No se asume un esquema EPC estándar (SGTIN, etc.) porque las pruebas de
 campo mostraron tags con contenido de texto plano, no codificación GS1

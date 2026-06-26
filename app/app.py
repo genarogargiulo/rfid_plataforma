@@ -1,5 +1,5 @@
 """
-app.py — Aplicación principal de la plataforma RFID multi-reader FPT.
+app.py — Aplicación principal de la plataforma RFID multi-reader.
 
 Funcionalidades:
   - Conexión simultánea a N readers (configurados en SQL Server).
@@ -7,28 +7,82 @@ Funcionalidades:
   - Panel web en tiempo real con WebSocket (lecturas, KPIs por reader/antena).
   - CRUD de readers y antenas desde la interfaz web (alta/baja/edición),
     sin necesidad de tocar archivos de configuración ni reiniciar el server.
+  - Gestión de usuarios con email/contraseña y sesiones permanentes.
+  - Log de actividad de usuarios persistido en SQL Server.
 
 Uso:
     1. Ejecutar sql/schema.sql contra una base de datos SQL Server vacía.
-    2. Editar core/config.py con los datos de conexión a esa base.
-    3. pip install -r requirements.txt
-    4. python app.py
-    5. Abrir http://localhost:5000 — desde ahí se pueden agregar readers.
+    2. Ejecutar sql/usuarios_y_logs.sql en la misma base de datos.
+    3. Editar core/config.py con los datos de conexión a esa base.
+    4. pip install -r requirements.txt
+    5. python app.py
+    6. Abrir http://localhost:5000 — crear el primer usuario en /setup.
 """
 
+import importlib.util
 import logging
 import sys
 import threading
 import time
 from collections import defaultdict, deque
+from datetime import timedelta
+from functools import wraps
 from pathlib import Path
 
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, redirect, url_for, session
+from flask_login import (
+    LoginManager, UserMixin,
+    login_user, logout_user, login_required, current_user,
+)
 from flask_socketio import SocketIO
+from werkzeug.security import generate_password_hash, check_password_hash
 
-sys.path.insert(0, str(Path(__file__).parent / "core"))
+# ── Rutas de recursos: desarrollo vs. bundle PyInstaller (onedir) ─────────────
+#
+# En modo bundle:
+#   sys._MEIPASS  = carpeta _internal/ con el bytecode y assets
+#   sys.executable = ruta al .exe → su directorio es editable por el usuario
+#
+# config.py se carga SIEMPRE desde el sistema de archivos (nunca desde el
+# bytecode del bundle) para que los cambios guardados desde el panel web
+# persistan entre reinicios sin necesidad de recompilar.
 
-import config
+def _resource_path(relative: str) -> str:
+    """Ruta absoluta a un asset (templates, static). Funciona en dev y en bundle."""
+    if hasattr(sys, '_MEIPASS'):
+        return str(Path(sys._MEIPASS) / relative)
+    return str(Path(__file__).parent / relative)
+
+
+def _config_path() -> Path:
+    """Ruta al config.py editable. En bundle va junto al .exe (directorio writable)."""
+    if hasattr(sys, '_MEIPASS'):
+        return Path(sys.executable).parent / "config.py"
+    return Path(__file__).parent / "core" / "config.py"
+
+
+def _cargar_config():
+    """
+    Carga config.py desde el archivo en disco usando importlib, evitando el
+    módulo congelado de PyInstaller. Así el panel web puede guardar cambios
+    en config.py y al reiniciar la app los toma sin recompilar el bundle.
+    """
+    path = _config_path()
+    spec = importlib.util.spec_from_file_location("config", str(path))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    sys.modules["config"] = mod   # garantiza que 'import config' en otros módulos
+    return mod                    # use esta versión (sys.modules tiene prioridad)
+
+
+# Agregar core/ al path para los módulos de la app (database, epc_decoder, etc.)
+if hasattr(sys, '_MEIPASS'):
+    sys.path.insert(0, str(Path(sys._MEIPASS) / "core"))
+else:
+    sys.path.insert(0, str(Path(__file__).parent / "core"))
+
+config = _cargar_config()  # ANTES de importar database (que hace 'import config')
+
 import database
 from epc_decoder import decodificar_epc
 from rfid_manager import GestorMultiReader
@@ -40,34 +94,95 @@ logging.basicConfig(
 )
 logger = logging.getLogger("app")
 
-app = Flask(__name__, template_folder="templates", static_folder="static")
+app = Flask(
+    __name__,
+    template_folder=_resource_path("templates"),
+    static_folder=_resource_path("static"),
+)
 app.config["SECRET_KEY"] = "rfid-plataforma-fpt"
-app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0  # evita que el navegador cachee JS/CSS viejos durante el desarrollo
+app.config["SEND_FILE_MAX_AGE_DEFAULT"] = 0
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=3650)
+app.config["REMEMBER_COOKIE_DURATION"] = timedelta(days=3650)
+
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="threading")
+
+login_manager = LoginManager(app)
+login_manager.login_view = "login"
+login_manager.login_message = "Iniciá sesión para acceder al panel."
+
+
+# ── Modelo de usuario para Flask-Login ───────────────────────────────────────
+
+class Usuario(UserMixin):
+    def __init__(self, usuario_id: int, email: str, nombre: str, activo: bool, rol: str = 'usuario'):
+        self.usuario_id = usuario_id
+        self.email = email
+        self.nombre = nombre
+        self.activo = activo
+        self.rol = rol
+
+    @property
+    def es_admin(self) -> bool:
+        return self.rol == 'admin'
+
+    def get_id(self):
+        return str(self.usuario_id)
+
+
+@login_manager.user_loader
+def cargar_usuario(usuario_id: str):
+    row = database.obtener_usuario_por_id(int(usuario_id))
+    if row is None or not row.activo:
+        return None
+    return Usuario(row.usuario_id, row.email, row.nombre, row.activo, row.rol)
+
+
+def admin_required(f):
+    """Decorador: exige que el usuario autenticado tenga rol 'admin'."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.es_admin:
+            if request.path.startswith('/api/'):
+                return jsonify({"ok": False, "error": "Acceso denegado. Se requiere rol administrador."}), 403
+            return redirect(url_for("index"))
+        return f(*args, **kwargs)
+    return decorated
+
+
+# ── Helper de log de actividad ───────────────────────────────────────────────
+
+def _log(accion: str, detalle: str = None):
+    """Registra la acción del usuario autenticado actual. Nunca lanza excepción."""
+    try:
+        uid = current_user.usuario_id if current_user.is_authenticated else None
+        email = current_user.email if current_user.is_authenticated else None
+        database.registrar_actividad(uid, email, accion, detalle, request.remote_addr)
+    except Exception:
+        pass
+
+
+# ── Buffer y estado en memoria ───────────────────────────────────────────────
 
 buffer_lecturas = database.BufferLecturas(
     intervalo_flush_seg=config.INTERVALO_FLUSH_SEGUNDOS,
     tamano_maximo=config.TAMANO_MAXIMO_BUFFER,
 )
 
-# ── Estado en memoria para el panel (no reemplaza a la BD, es solo para
-#    que la UI tenga algo que mostrar sin tener que consultar SQL Server
-#    en cada evento) ────────────────────────────────────────────────────
 ESTADO = {
     "eventos_recientes": deque(maxlen=300),
     "tags_unicos": set(),
     "lecturas_por_antena": defaultdict(int),
     "lecturas_por_reader": defaultdict(int),
-    "estado_readers": {},  # reader_id -> {"nombre", "ip", "estado", "detalle"}
+    "estado_readers": {},
 }
 _lock_estado = threading.Lock()
 
-gestor: GestorMultiReader = None  # se inicializa en main
+gestor: GestorMultiReader = None
 
+
+# ── Callbacks del gestor RFID ─────────────────────────────────────────────────
 
 def on_tag_report(reader_cfg, antena_id: int, tag: dict):
-    """Callback invocado por cada tag leído, desde cualquiera de los hilos
-    de reader activos. Decodifica, persiste en el buffer, y empuja al panel."""
     epc_hex, epc_ascii = decodificar_epc(tag)
     rssi = tag.get("PeakRSSI")
     tag_seen_count = tag.get("TagSeenCount")
@@ -135,12 +250,11 @@ def _construir_kpis() -> dict:
 
 
 def _disparar_recarga_gestor():
-    """Notifica al gestor multi-reader que recargue la configuración ahora,
-    para que un alta/edición/baja hecha desde el panel tome efecto sin
-    esperar al ciclo periódico."""
     if gestor is not None:
         gestor.recargar_ahora()
 
+
+# ── Manejo de errores ─────────────────────────────────────────────────────────
 
 @app.errorhandler(404)
 def manejar_404(e):
@@ -148,29 +262,124 @@ def manejar_404(e):
     return jsonify({"ok": False, "error": f"Ruta no encontrada: {request.path}"}), 404
 
 
-# ── Rutas HTTP: panel principal ──────────────────────────────────────────
+# ── Rutas de autenticación ────────────────────────────────────────────────────
+
+@app.route("/setup", methods=["GET", "POST"])
+def setup():
+    """Creación del primer usuario. Solo accesible cuando no existe ninguno."""
+    if database.contar_usuarios() > 0:
+        return redirect(url_for("login"))
+
+    error = None
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        nombre = request.form.get("nombre", "").strip()
+        password = request.form.get("password", "")
+        confirm = request.form.get("confirm", "")
+
+        if not email or not nombre or not password:
+            error = "Todos los campos son obligatorios."
+        elif password != confirm:
+            error = "Las contraseñas no coinciden."
+        elif len(password) < 6:
+            error = "La contraseña debe tener al menos 6 caracteres."
+        else:
+            try:
+                ph = generate_password_hash(password)
+                database.crear_usuario(email, nombre, ph, rol='admin')
+                logger.info("Primer usuario (admin) creado: %s", email)
+                return redirect(url_for("login"))
+            except Exception as e:
+                error = f"Error al crear usuario: {e}"
+
+    return render_template("setup.html", error=error)
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for("index"))
+
+    if database.contar_usuarios() == 0:
+        return redirect(url_for("setup"))
+
+    error = None
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        password = request.form.get("password", "")
+        row = database.obtener_usuario_por_email(email)
+
+        if row and bool(row[4]) and check_password_hash(row[3], password):
+            user = Usuario(row[0], row[1], row[2], bool(row[4]), row[5] if len(row) > 5 else 'usuario')
+            session.permanent = True
+            login_user(user, remember=True)
+            database.actualizar_ultimo_acceso(user.usuario_id)
+            database.registrar_actividad(
+                user.usuario_id, user.email, "login", None, request.remote_addr
+            )
+            logger.info("Login exitoso: %s desde %s", email, request.remote_addr)
+            next_page = request.args.get("next") or url_for("index")
+            return redirect(next_page)
+        else:
+            database.registrar_actividad(
+                None, email, "login_fallido", "Credenciales incorrectas", request.remote_addr
+            )
+            logger.warning("Login fallido para '%s' desde %s", email, request.remote_addr)
+            error = "Email o contraseña incorrectos."
+
+    return render_template("login.html", error=error)
+
+
+@app.route("/logout")
+@login_required
+def logout():
+    database.registrar_actividad(
+        current_user.usuario_id, current_user.email, "logout", None, request.remote_addr
+    )
+    logger.info("Logout: %s", current_user.email)
+    logout_user()
+    return redirect(url_for("login"))
+
+
+# ── Rutas HTTP: panel principal ───────────────────────────────────────────────
+
 @app.route("/")
+@login_required
 def index():
     return render_template("index.html")
 
 
 @app.route("/configuracion")
+@login_required
+@admin_required
 def pagina_configuracion():
     return render_template("configuracion.html")
 
 
+@app.route("/usuarios")
+@login_required
+@admin_required
+def pagina_usuarios():
+    return render_template("usuarios.html")
+
+
 @app.route("/informes")
+@login_required
 def pagina_informes():
     return render_template("informes.html")
 
 
 @app.route("/docs")
+@login_required
 def pagina_docs():
     return render_template("docs.html")
 
 
-# ── API REST: gestión de readers y antenas ────────────────────────────────
+# ── API REST: gestión de readers y antenas ────────────────────────────────────
+
 @app.route("/api/readers", methods=["GET"])
+@login_required
+@admin_required
 def api_listar_readers():
     readers = database.obtener_readers_activos()
     return jsonify([
@@ -192,6 +401,8 @@ def api_listar_readers():
 
 
 @app.route("/api/readers", methods=["POST"])
+@login_required
+@admin_required
 def api_crear_reader():
     data = request.get_json(force=True)
     try:
@@ -206,6 +417,7 @@ def api_crear_reader():
             tx_power_dbm=data.get("tx_power_dbm"),
         )
         _disparar_recarga_gestor()
+        _log("crear_reader", f"Reader '{data.get('nombre')}' (ID {reader_id}) — IP {data.get('ip_address')}")
         return jsonify({"ok": True, "reader_id": reader_id})
     except Exception as e:
         logger.exception("Error creando reader")
@@ -213,11 +425,15 @@ def api_crear_reader():
 
 
 @app.route("/api/readers/<int:reader_id>", methods=["PUT"])
+@login_required
+@admin_required
 def api_actualizar_reader(reader_id):
     data = request.get_json(force=True)
     try:
         database.actualizar_reader(reader_id, **data)
         _disparar_recarga_gestor()
+        campos = ", ".join(f"{k}={v}" for k, v in data.items())
+        _log("actualizar_reader", f"Reader ID {reader_id} — {campos}")
         return jsonify({"ok": True})
     except Exception as e:
         logger.exception("Error actualizando reader %s", reader_id)
@@ -225,10 +441,13 @@ def api_actualizar_reader(reader_id):
 
 
 @app.route("/api/readers/<int:reader_id>", methods=["DELETE"])
+@login_required
+@admin_required
 def api_eliminar_reader(reader_id):
     try:
         database.eliminar_reader(reader_id)
         _disparar_recarga_gestor()
+        _log("eliminar_reader", f"Reader ID {reader_id}")
         return jsonify({"ok": True})
     except Exception as e:
         logger.exception("Error eliminando reader %s", reader_id)
@@ -236,6 +455,8 @@ def api_eliminar_reader(reader_id):
 
 
 @app.route("/api/readers/<int:reader_id>/antenas", methods=["POST"])
+@login_required
+@admin_required
 def api_crear_antena(reader_id):
     data = request.get_json(force=True)
     try:
@@ -246,6 +467,7 @@ def api_crear_antena(reader_id):
             ubicacion=data.get("ubicacion"),
         )
         _disparar_recarga_gestor()
+        _log("crear_antena", f"Antena '{data.get('nombre')}' (ID {antena_id}) en Reader {reader_id}")
         return jsonify({"ok": True, "antena_id": antena_id})
     except Exception as e:
         logger.exception("Error creando antena para reader %s", reader_id)
@@ -253,10 +475,13 @@ def api_crear_antena(reader_id):
 
 
 @app.route("/api/antenas/<int:antena_id>", methods=["DELETE"])
+@login_required
+@admin_required
 def api_eliminar_antena(antena_id):
     try:
         database.eliminar_antena(antena_id)
         _disparar_recarga_gestor()
+        _log("eliminar_antena", f"Antena ID {antena_id}")
         return jsonify({"ok": True})
     except Exception as e:
         logger.exception("Error eliminando antena %s", antena_id)
@@ -264,16 +489,19 @@ def api_eliminar_antena(antena_id):
 
 
 @app.route("/api/db/test", methods=["GET"])
+@login_required
+@admin_required
 def api_probar_bd():
     ok, mensaje = database.probar_conexion()
     return jsonify({"ok": ok, "mensaje": mensaje})
 
 
-# ── API: configuración del sistema (config.py en tiempo de ejecución) ────
+# ── API: configuración del sistema ────────────────────────────────────────────
+
 @app.route("/api/config/sistema", methods=["GET"])
+@login_required
+@admin_required
 def api_obtener_config():
-    """Devuelve los valores actuales de config.py como JSON, para mostrarlos
-    en el panel de configuración del sistema sin exponer la contraseña."""
     return jsonify({
         "DB_DRIVER": config.DB_DRIVER,
         "DB_SERVER": config.DB_SERVER,
@@ -295,15 +523,15 @@ def api_obtener_config():
 
 
 @app.route("/api/config/sistema", methods=["POST"])
+@login_required
+@admin_required
 def api_guardar_config():
-    """Persiste los valores editables de config.py en disco. Los cambios de
-    conexión a BD y parámetros LLRP requieren reiniciar la app para tomar efecto;
-    se informa claramente al cliente."""
     data = request.get_json(force=True)
     try:
-        config_path = Path(__file__).parent / "core" / "config.py"
+        config_path = _config_path()
         lineas_nuevas = _generar_config_py(data)
         config_path.write_text(lineas_nuevas, encoding="utf-8")
+        _log("guardar_config", f"Servidor: {data.get('DB_SERVER')}, BD: {data.get('DB_DATABASE')}")
         return jsonify({"ok": True, "requiere_reinicio": True,
                         "mensaje": "Configuración guardada. Reiniciá la aplicación para aplicar los cambios de conexión y parámetros LLRP."})
     except Exception as e:
@@ -312,13 +540,12 @@ def api_guardar_config():
 
 
 def _generar_config_py(data: dict) -> str:
-    """Genera el contenido del archivo config.py a partir de los valores del formulario."""
     def py_str(v): return f'"{v}"'
     def py_bool(v): return "True" if v else "False"
 
     password = data.get("DB_PASSWORD", "")
     if password == "••••••":
-        password = config.DB_PASSWORD  # no sobrescribir si no se cambió
+        password = config.DB_PASSWORD
 
     return f'''"""
 config.py — Configuración general de la plataforma RFID.
@@ -355,10 +582,11 @@ WEB_PORT = {int(data.get("WEB_PORT", config.WEB_PORT))}
 '''
 
 
-# ── API: informes estadísticos ────────────────────────────────────────────
+# ── API: informes estadísticos ────────────────────────────────────────────────
+
 @app.route("/api/informes/resumen_diario", methods=["GET"])
+@login_required
 def api_resumen_diario():
-    """Lecturas y tags únicos por día (últimos N días) para gráfico de tendencia."""
     dias = request.args.get("dias", 30, type=int)
     try:
         conn = database.obtener_conexion()
@@ -383,8 +611,8 @@ def api_resumen_diario():
 
 
 @app.route("/api/informes/por_antena", methods=["GET"])
+@login_required
 def api_por_antena():
-    """Total de lecturas y tags únicos por antena en el período seleccionado."""
     dias = request.args.get("dias", 30, type=int)
     try:
         conn = database.obtener_conexion()
@@ -412,8 +640,8 @@ def api_por_antena():
 
 
 @app.route("/api/informes/por_hora", methods=["GET"])
+@login_required
 def api_por_hora():
-    """Distribución de lecturas por hora del día (para detectar horarios pico)."""
     dias = request.args.get("dias", 7, type=int)
     try:
         conn = database.obtener_conexion()
@@ -436,8 +664,8 @@ def api_por_hora():
 
 
 @app.route("/api/informes/resumen_mensual", methods=["GET"])
+@login_required
 def api_resumen_mensual():
-    """Lecturas y tags únicos agrupados por mes (últimos 12 meses)."""
     try:
         conn = database.obtener_conexion()
         cur = conn.cursor()
@@ -460,8 +688,8 @@ def api_resumen_mensual():
 
 
 @app.route("/api/informes/kpis_generales", methods=["GET"])
+@login_required
 def api_kpis_generales():
-    """KPIs de alto nivel para el encabezado del dashboard gerencial."""
     try:
         conn = database.obtener_conexion()
         cur = conn.cursor()
@@ -475,7 +703,6 @@ def api_kpis_generales():
             FROM dbo.LecturasRFID
         """)
         r = cur.fetchone()
-        hoy = None
         cur.execute("""
             SELECT COUNT(*) FROM dbo.LecturasRFID
             WHERE CAST(TimestampReader AS DATE) = CAST(SYSUTCDATETIME() AS DATE)
@@ -494,9 +721,106 @@ def api_kpis_generales():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-# ── Eventos SocketIO ────────────────────────────────────────────────────
+# ── API: gestión de usuarios (solo admin) ────────────────────────────────────
+
+@app.route("/api/usuarios", methods=["GET"])
+@login_required
+@admin_required
+def api_listar_usuarios():
+    return jsonify({"ok": True, "usuarios": database.listar_usuarios()})
+
+
+@app.route("/api/usuarios", methods=["POST"])
+@login_required
+@admin_required
+def api_crear_usuario():
+    data = request.get_json(force=True)
+    email = data.get("email", "").strip().lower()
+    nombre = data.get("nombre", "").strip()
+    password = data.get("password", "")
+    rol = data.get("rol", "usuario")
+
+    if not email or not nombre or not password:
+        return jsonify({"ok": False, "error": "Email, nombre y contraseña son obligatorios."}), 400
+    if len(password) < 6:
+        return jsonify({"ok": False, "error": "La contraseña debe tener al menos 6 caracteres."}), 400
+    if rol not in ("admin", "usuario"):
+        return jsonify({"ok": False, "error": "Rol inválido."}), 400
+    if database.obtener_usuario_por_email(email):
+        return jsonify({"ok": False, "error": "Ya existe un usuario con ese email."}), 400
+
+    try:
+        ph = generate_password_hash(password)
+        uid = database.crear_usuario(email, nombre, ph, rol)
+        _log("crear_usuario", f"{nombre} <{email}> rol={rol}")
+        logger.info("Usuario creado por admin %s: %s (rol=%s)", current_user.email, email, rol)
+        return jsonify({"ok": True, "usuario_id": uid})
+    except Exception as e:
+        logger.exception("Error creando usuario")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/usuarios/<int:usuario_id>", methods=["PUT"])
+@login_required
+@admin_required
+def api_actualizar_usuario(usuario_id):
+    data = request.get_json(force=True)
+    nombre = data.get("nombre", "").strip()
+    email = data.get("email", "").strip().lower()
+    rol = data.get("rol", "usuario")
+    activo = bool(data.get("activo", True))
+
+    if not nombre or not email:
+        return jsonify({"ok": False, "error": "Nombre y email son obligatorios."}), 400
+    if rol not in ("admin", "usuario"):
+        return jsonify({"ok": False, "error": "Rol inválido."}), 400
+
+    # Evitar que el propio admin se quite el rol admin o se desactive
+    if usuario_id == current_user.usuario_id:
+        if rol != 'admin':
+            return jsonify({"ok": False, "error": "No podés quitarte el rol administrador a vos mismo."}), 400
+        if not activo:
+            return jsonify({"ok": False, "error": "No podés desactivar tu propio usuario."}), 400
+
+    # Evitar quedar sin ningún admin activo
+    if rol != 'admin' or not activo:
+        row = database.obtener_usuario_por_id(usuario_id)
+        if row and row.rol == 'admin' and database.contar_admins() <= 1:
+            return jsonify({"ok": False, "error": "Debe existir al menos un administrador activo."}), 400
+
+    try:
+        database.actualizar_usuario(usuario_id, nombre, email, rol, activo)
+        _log("actualizar_usuario", f"ID {usuario_id} → nombre={nombre}, email={email}, rol={rol}, activo={activo}")
+        return jsonify({"ok": True})
+    except Exception as e:
+        logger.exception("Error actualizando usuario %s", usuario_id)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route("/api/usuarios/<int:usuario_id>/password", methods=["PUT"])
+@login_required
+@admin_required
+def api_cambiar_password(usuario_id):
+    data = request.get_json(force=True)
+    password = data.get("password", "")
+    if len(password) < 6:
+        return jsonify({"ok": False, "error": "La contraseña debe tener al menos 6 caracteres."}), 400
+    try:
+        database.cambiar_password_usuario(usuario_id, generate_password_hash(password))
+        _log("cambiar_password", f"Usuario ID {usuario_id}")
+        return jsonify({"ok": True})
+    except Exception as e:
+        logger.exception("Error cambiando contraseña de usuario %s", usuario_id)
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+# ── Eventos SocketIO ──────────────────────────────────────────────────────────
+
 @socketio.on("connect")
 def al_conectar_cliente():
+    if not current_user.is_authenticated:
+        return False  # rechaza conexión si no está autenticado
+
     with _lock_estado:
         eventos = list(ESTADO["eventos_recientes"])
     socketio.emit("estado_inicial", {
@@ -505,7 +829,8 @@ def al_conectar_cliente():
     })
 
 
-# ── Arranque ─────────────────────────────────────────────────────────────
+# ── Arranque ──────────────────────────────────────────────────────────────────
+
 def iniciar_plataforma():
     global gestor
 

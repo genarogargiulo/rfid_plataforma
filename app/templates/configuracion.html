@@ -16,11 +16,18 @@
       <span class="brand-sub">Configuración</span>
     </div>
   </div>
-  <nav class="topbar-nav">
-    <a href="/" class="nav-link">Panel en vivo</a>
-    <a href="/informes" class="nav-link">Informes</a>
-    <a href="/configuracion" class="nav-link active">Configuración</a>
-  </nav>
+  <div class="topbar-right">
+    <nav class="topbar-nav">
+      <a href="/" class="nav-link">Panel en vivo</a>
+      <a href="/informes" class="nav-link">Informes</a>
+      <a href="/configuracion" class="nav-link active">Configuración</a>
+      <a href="/usuarios" class="nav-link">Usuarios</a>
+    </nav>
+    <div class="topbar-user">
+      <span class="topbar-username">{{ current_user.nombre }}</span>
+      <a href="/logout" class="nav-link nav-link--logout">Salir</a>
+    </div>
+  </div>
 </header>
 
 <main class="layout">
@@ -92,7 +99,7 @@
             <span class="tooltip-icon" data-tip="Nombre de la base de datos donde se ejecutó el script schema.sql.">?</span>
           </label>
           <input type="text" id="cfg-db-database" name="DB_DATABASE" class="config-input"
-                 placeholder="RFID_FPT">
+                 placeholder="RFID">
         </div>
 
         <div class="config-field">

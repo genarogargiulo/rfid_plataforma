@@ -17,11 +17,20 @@
       <span class="brand-sub">Informes estadísticos</span>
     </div>
   </div>
-  <nav class="topbar-nav">
-    <a href="/" class="nav-link">Panel en vivo</a>
-    <a href="/informes" class="nav-link active">Informes</a>
-    <a href="/configuracion" class="nav-link">Configuración</a>
-  </nav>
+  <div class="topbar-right">
+    <nav class="topbar-nav">
+      <a href="/" class="nav-link">Panel en vivo</a>
+      <a href="/informes" class="nav-link active">Informes</a>
+      {% if current_user.es_admin %}
+      <a href="/configuracion" class="nav-link">Configuración</a>
+      <a href="/usuarios" class="nav-link">Usuarios</a>
+      {% endif %}
+    </nav>
+    <div class="topbar-user">
+      <span class="topbar-username">{{ current_user.nombre }}</span>
+      <a href="/logout" class="nav-link nav-link--logout">Salir</a>
+    </div>
+  </div>
 </header>
 
 <main class="layout">

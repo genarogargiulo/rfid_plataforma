@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Configuración inicial — Panel RFID</title>
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="auth-page">
+  <div class="auth-card">
+
+    <div class="auth-brand">
+      <span class="brand-mark">RFID</span>
+      <div class="brand-text">
+        <h1>Plataforma RFID</h1>
+        <span class="brand-sub">RFID</span>
+      </div>
+    </div>
+
+    <h2 class="auth-title">Crear administrador</h2>
+    <p class="auth-subtitle">Primera vez — creá el usuario administrador del sistema.</p>
+
+    {% if error %}
+    <div class="auth-error">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST">
+      <div class="auth-field">
+        <label for="nombre">Nombre completo</label>
+        <input type="text" id="nombre" name="nombre" placeholder="Juan Pérez" required autofocus>
+      </div>
+      <div class="auth-field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" placeholder="usuario@empresa.com" required>
+      </div>
+      <div class="auth-field">
+        <label for="password">Contraseña</label>
+        <input type="password" id="password" name="password" placeholder="Mínimo 6 caracteres" required>
+      </div>
+      <div class="auth-field">
+        <label for="confirm">Confirmar contraseña</label>
+        <input type="password" id="confirm" name="confirm" placeholder="Repetir contraseña" required>
+      </div>
+      <button type="submit" class="btn-primary auth-submit">Crear cuenta</button>
+    </form>
+
+  </div>
+</div>
+
+</body>
+</html>

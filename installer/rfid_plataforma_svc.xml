@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  rfid_plataforma_svc.xml — Configuración de WinSW
+
+  Este archivo DEBE tener el mismo nombre que el ejecutable de WinSW
+  (rfid_plataforma_svc.exe) y estar en el mismo directorio.
+
+  %BASE% = directorio donde está este archivo (el directorio de instalación).
+-->
+<service>
+
+  <!-- Identificador interno del servicio Windows (sin espacios) -->
+  <id>RFID_Plataforma</id>
+  <name>RFID Plataforma</name>
+  <description>Plataforma de trazabilidad RFID</description>
+
+  <!-- Ejecutable de la app Flask -->
+  <executable>%BASE%\rfid_plataforma.exe</executable>
+  <workingdirectory>%BASE%</workingdirectory>
+
+  <!-- Inicio automático con Windows -->
+  <startmode>Automatic</startmode>
+
+  <!-- Logs rotativos por tamaño: máximo 10 MB, 5 archivos históricos -->
+  <logpath>%BASE%\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>5</keepFiles>
+  </log>
+
+  <!-- Reintentos automáticos si el proceso cae inesperadamente -->
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+  <resetfailure>1 hour</resetfailure>
+
+</service>

@@ -317,3 +317,170 @@ class BufferLecturas:
     @property
     def ultimo_error(self) -> Optional[str]:
         return self._ultimo_error
+
+
+# ── Usuarios ─────────────────────────────────────────────────────────────────
+
+@dataclass
+class UsuarioRow:
+    usuario_id: int
+    email: str
+    nombre: str
+    activo: bool
+    rol: str = 'usuario'
+
+
+def contar_usuarios() -> int:
+    """Devuelve la cantidad de usuarios activos. Retorna -1 si la tabla no existe aún."""
+    try:
+        conn = obtener_conexion()
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM dbo.Usuarios WHERE Activo = 1")
+        n = cur.fetchone()[0]
+        conn.close()
+        return n
+    except Exception:
+        return -1
+
+
+def obtener_usuario_por_id(usuario_id: int) -> Optional[UsuarioRow]:
+    try:
+        conn = obtener_conexion()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT UsuarioId, Email, Nombre, Activo, Rol FROM dbo.Usuarios WHERE UsuarioId = ?",
+            usuario_id,
+        )
+        row = cur.fetchone()
+        conn.close()
+        if not row:
+            return None
+        return UsuarioRow(usuario_id=row[0], email=row[1], nombre=row[2], activo=bool(row[3]), rol=row[4])
+    except Exception:
+        return None
+
+
+def obtener_usuario_por_email(email: str):
+    """Devuelve (UsuarioId, Email, Nombre, PasswordHash, Activo, Rol) o None."""
+    try:
+        conn = obtener_conexion()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT UsuarioId, Email, Nombre, PasswordHash, Activo, Rol FROM dbo.Usuarios WHERE Email = ?",
+            email,
+        )
+        row = cur.fetchone()
+        conn.close()
+        return row
+    except Exception:
+        return None
+
+
+def crear_usuario(email: str, nombre: str, password_hash: str, rol: str = 'usuario') -> int:
+    conn = obtener_conexion()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO dbo.Usuarios (Email, Nombre, PasswordHash, Rol)
+        OUTPUT INSERTED.UsuarioId
+        VALUES (?, ?, ?, ?)
+    """, email, nombre, password_hash, rol)
+    usuario_id = cur.fetchone()[0]
+    conn.commit()
+    conn.close()
+    return usuario_id
+
+
+def actualizar_ultimo_acceso(usuario_id: int):
+    try:
+        conn = obtener_conexion()
+        cur = conn.cursor()
+        cur.execute(
+            "UPDATE dbo.Usuarios SET UltimoAcceso = SYSUTCDATETIME() WHERE UsuarioId = ?",
+            usuario_id,
+        )
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+
+def listar_usuarios() -> list:
+    """Devuelve todos los usuarios (activos e inactivos) para el panel de administración."""
+    conn = obtener_conexion()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT UsuarioId, Email, Nombre, Activo, Rol,
+               FechaCreacion, UltimoAcceso
+        FROM dbo.Usuarios
+        ORDER BY FechaCreacion
+    """)
+    rows = cur.fetchall()
+    conn.close()
+    return [
+        {
+            "usuario_id": r[0], "email": r[1], "nombre": r[2],
+            "activo": bool(r[3]), "rol": r[4],
+            "fecha_creacion": r[5].isoformat() if r[5] else None,
+            "ultimo_acceso": r[6].isoformat() if r[6] else None,
+        }
+        for r in rows
+    ]
+
+
+def actualizar_usuario(usuario_id: int, nombre: str, email: str, rol: str, activo: bool):
+    conn = obtener_conexion()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE dbo.Usuarios
+        SET Nombre = ?, Email = ?, Rol = ?, Activo = ?
+        WHERE UsuarioId = ?
+    """, nombre, email.strip().lower(), rol, 1 if activo else 0, usuario_id)
+    conn.commit()
+    conn.close()
+
+
+def cambiar_password_usuario(usuario_id: int, password_hash: str):
+    conn = obtener_conexion()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE dbo.Usuarios SET PasswordHash = ? WHERE UsuarioId = ?",
+        password_hash, usuario_id,
+    )
+    conn.commit()
+    conn.close()
+
+
+def contar_admins() -> int:
+    """Cuenta cuántos usuarios activos tienen rol admin. Previene dejar el sistema sin admin."""
+    try:
+        conn = obtener_conexion()
+        cur = conn.cursor()
+        cur.execute("SELECT COUNT(*) FROM dbo.Usuarios WHERE Rol = 'admin' AND Activo = 1")
+        n = cur.fetchone()[0]
+        conn.close()
+        return n
+    except Exception:
+        return 0
+
+
+# ── Log de actividad ─────────────────────────────────────────────────────────
+
+def registrar_actividad(
+    usuario_id: Optional[int],
+    email: Optional[str],
+    accion: str,
+    detalle: Optional[str],
+    ip: Optional[str],
+):
+    """Inserta una fila en LogActividad. Nunca lanza excepción para no romper la app."""
+    try:
+        conn = obtener_conexion()
+        cur = conn.cursor()
+        cur.execute("""
+            INSERT INTO dbo.LogActividad (UsuarioId, Email, Accion, Detalle, Ip)
+            VALUES (?, ?, ?, ?, ?)
+        """, usuario_id, email, accion[:100], detalle[:1000] if detalle else None, ip)
+        conn.commit()
+        conn.close()
+    except Exception:
+        logger.exception("No se pudo registrar actividad en BD")

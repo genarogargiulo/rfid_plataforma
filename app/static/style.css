@@ -802,3 +802,215 @@ body {
 @media (max-width: 900px) {
   .charts-row-2 { grid-template-columns: 1fr; }
 }
+
+/* ── Topbar: usuario autenticado ─────────────────────────────────────── */
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 14px;
+  border-left: 1px solid var(--border);
+}
+
+.topbar-username {
+  font-size: 13px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.nav-link--logout {
+  color: var(--text-secondary);
+}
+
+.nav-link--logout:hover {
+  color: var(--red);
+  background: var(--red-soft);
+}
+
+/* ── Página de autenticación (login / setup) ─────────────────────────── */
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.auth-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 36px 40px;
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.auth-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.auth-title {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+  color: var(--text-primary);
+}
+
+.auth-subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: -16px 0 0;
+}
+
+.auth-error {
+  background: var(--red-soft);
+  border: 1px solid var(--red);
+  color: var(--red);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 13px;
+}
+
+.auth-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.auth-field label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.auth-field input {
+  background: var(--panel-alt);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 14px;
+  padding: 10px 12px;
+  outline: none;
+  width: 100%;
+  transition: border-color 0.15s;
+}
+
+.auth-field input:focus {
+  border-color: var(--accent);
+}
+
+.auth-field input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.auth-submit {
+  width: 100%;
+  padding: 11px;
+  font-size: 14px;
+}
+
+/* ── Gestión de usuarios ──────────────────────────────────────────────── */
+.usuarios-tabla-wrap {
+  overflow-x: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0;
+}
+
+.tabla-usuarios {
+  width: 100%;
+}
+
+.tabla-usuarios td,
+.tabla-usuarios th {
+  white-space: nowrap;
+}
+
+.acciones-col {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.btn-table {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--panel-alt);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-table:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+.btn-pwd:hover { background: var(--amber-soft); border-color: var(--amber); color: var(--amber); }
+
+.fila-inactiva td { opacity: 0.5; }
+
+.rol-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+}
+
+.rol-admin  { background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent); }
+.rol-usuario { background: var(--panel-alt); color: var(--text-secondary); border: 1px solid var(--border); }
+
+.estado-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.estado-activo  { background: var(--green-soft); color: var(--green); }
+.estado-inactivo { background: var(--red-soft); color: var(--red); }
+
+.yo-badge {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.roles-descripcion {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.rol-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.sistema-save-banner.banner-error {
+  background: var(--red-soft);
+  border-color: var(--red);
+  color: var(--red);
+}
