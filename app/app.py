@@ -19,6 +19,8 @@ Uso:
     6. Abrir http://localhost:5000 — crear el primer usuario en /setup.
 """
 
+import argparse
+import getpass
 import importlib.util
 import logging
 import sys
@@ -61,6 +63,13 @@ def _config_path() -> Path:
     return Path(__file__).parent / "core" / "config.py"
 
 
+def _sql_dir() -> Path:
+    """Directorio con los scripts .sql (schema.sql, usuarios_y_logs.sql)."""
+    if hasattr(sys, '_MEIPASS'):
+        return Path(sys.executable).parent / "sql"
+    return Path(__file__).parent.parent / "sql"
+
+
 def _cargar_config():
     """
     Carga config.py desde el archivo en disco usando importlib, evitando el
@@ -84,14 +93,37 @@ else:
 config = _cargar_config()  # ANTES de importar database (que hace 'import config')
 
 import database
+import config_writer
 from epc_decoder import decodificar_epc
 from rfid_manager import GestorMultiReader
 from timestamp_utils import timestamp_llrp_a_datetime
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-)
+
+def _logs_dir() -> Path:
+    """Directorio de logs, junto al .exe en bundle o junto a app.py en dev."""
+    d = _config_path().parent / "logs"
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+def _configurar_logging():
+    handlers = [logging.StreamHandler()]
+    try:
+        from logging.handlers import RotatingFileHandler
+        handlers.append(RotatingFileHandler(
+            _logs_dir() / "rfid_plataforma.log",
+            maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8",
+        ))
+    except Exception:
+        pass  # si no se puede escribir el log a archivo, seguir solo con stdout
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+        handlers=handlers,
+    )
+
+
+_configurar_logging()
 logger = logging.getLogger("app")
 
 app = Flask(
@@ -528,8 +560,10 @@ def api_obtener_config():
 def api_guardar_config():
     data = request.get_json(force=True)
     try:
+        if data.get("DB_PASSWORD") == "••••••":
+            data["DB_PASSWORD"] = config.DB_PASSWORD
         config_path = _config_path()
-        lineas_nuevas = _generar_config_py(data)
+        lineas_nuevas = config_writer.generar_config_py(config, data)
         config_path.write_text(lineas_nuevas, encoding="utf-8")
         _log("guardar_config", f"Servidor: {data.get('DB_SERVER')}, BD: {data.get('DB_DATABASE')}")
         return jsonify({"ok": True, "requiere_reinicio": True,
@@ -537,49 +571,6 @@ def api_guardar_config():
     except Exception as e:
         logger.exception("Error guardando config.py")
         return jsonify({"ok": False, "error": str(e)}), 500
-
-
-def _generar_config_py(data: dict) -> str:
-    def py_str(v): return f'"{v}"'
-    def py_bool(v): return "True" if v else "False"
-
-    password = data.get("DB_PASSWORD", "")
-    if password == "••••••":
-        password = config.DB_PASSWORD
-
-    return f'''"""
-config.py — Configuración general de la plataforma RFID.
-Editado desde el panel web. Requiere reinicio de la aplicación para tomar efecto.
-"""
-
-# ── Conexión a SQL Server ───────────────────────────────────────────────
-DB_DRIVER = {py_str(data.get("DB_DRIVER", config.DB_DRIVER))}
-DB_SERVER = {py_str(data.get("DB_SERVER", config.DB_SERVER))}
-DB_DATABASE = {py_str(data.get("DB_DATABASE", config.DB_DATABASE))}
-
-DB_TRUSTED_CONNECTION = {py_bool(data.get("DB_TRUSTED_CONNECTION", config.DB_TRUSTED_CONNECTION))}
-DB_USERNAME = {py_str(data.get("DB_USERNAME", config.DB_USERNAME))}
-DB_PASSWORD = {py_str(password)}
-
-DB_ENCRYPT = {py_bool(data.get("DB_ENCRYPT", config.DB_ENCRYPT))}
-DB_TRUST_SERVER_CERTIFICATE = {py_bool(data.get("DB_TRUST_SERVER_CERTIFICATE", config.DB_TRUST_SERVER_CERTIFICATE))}
-
-# ── Buffer de inserts en batch ──────────────────────────────────────────
-INTERVALO_FLUSH_SEGUNDOS = {float(data.get("INTERVALO_FLUSH_SEGUNDOS", config.INTERVALO_FLUSH_SEGUNDOS))}
-TAMANO_MAXIMO_BUFFER = {int(data.get("TAMANO_MAXIMO_BUFFER", config.TAMANO_MAXIMO_BUFFER))}
-
-# ── Recarga de configuración de readers ─────────────────────────────────
-INTERVALO_RECARGA_CONFIG_SEGUNDOS = {int(data.get("INTERVALO_RECARGA_CONFIG_SEGUNDOS", config.INTERVALO_RECARGA_CONFIG_SEGUNDOS))}
-
-# ── Parámetros LLRP por defecto ──────────────────────────────────────────
-SESSION_DEFAULT = {int(data.get("SESSION_DEFAULT", config.SESSION_DEFAULT))}
-TAG_POPULATION_DEFAULT = {int(data.get("TAG_POPULATION_DEFAULT", config.TAG_POPULATION_DEFAULT))}
-REPORT_EVERY_N_TAGS = {int(data.get("REPORT_EVERY_N_TAGS", config.REPORT_EVERY_N_TAGS))}
-
-# ── Servidor web ───────────────────────────────────────────────────────
-WEB_HOST = {py_str(data.get("WEB_HOST", config.WEB_HOST))}
-WEB_PORT = {int(data.get("WEB_PORT", config.WEB_PORT))}
-'''
 
 
 # ── API: informes estadísticos ────────────────────────────────────────────────
@@ -863,7 +854,129 @@ def iniciar_plataforma():
     threading.Thread(target=_heartbeat, daemon=True, name="heartbeat").start()
 
 
+# ── CLI: setup de BD y utilidades de soporte (usadas por el instalador) ──────
+
+def _escribir_log(path: Path, lineas: list):
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("\n".join(lineas) + "\n\n")
+    except Exception:
+        pass
+
+
+def _cli_initdb(argv) -> int:
+    """Crea (si no existe) la base de datos y ejecuta los scripts SQL.
+    Pensado para ser invocado por el instalador (Inno Setup). Imprime a
+    stdout y a logs/db_init.log. Devuelve el código de salida del proceso."""
+    parser = argparse.ArgumentParser(prog="rfid_plataforma.exe initdb")
+    parser.add_argument("--driver", default="ODBC Driver 17 for SQL Server")
+    parser.add_argument("--server", required=True)
+    parser.add_argument("--database", required=True)
+    parser.add_argument("--trusted", action="store_true")
+    parser.add_argument("--user", default="")
+    parser.add_argument("--password", default="")
+    parser.add_argument("--no-write-config", action="store_true",
+                         help="No sobreescribir config.py con estos datos de conexión.")
+    args = parser.parse_args(argv)
+
+    log_path = _logs_dir() / "db_init.log"
+    log_lineas = []
+
+    def log(msg):
+        print(msg)
+        log_lineas.append(msg)
+
+    log(f"=== Setup de base de datos — {time.strftime('%Y-%m-%d %H:%M:%S')} ===")
+    autenticacion = "Windows" if args.trusted else f"SQL (usuario {args.user})"
+    log(f"Servidor: {args.server}  Base de datos: {args.database}  Autenticación: {autenticacion}")
+
+    rutas_sql = [_sql_dir() / "schema.sql", _sql_dir() / "usuarios_y_logs.sql"]
+    faltantes = [r for r in rutas_sql if not r.exists()]
+    if faltantes:
+        log(f"ERROR: no se encontraron los scripts SQL: {[str(r) for r in faltantes]}")
+        _escribir_log(log_path, log_lineas)
+        return 4
+
+    try:
+        database.setup_base_datos_desde_scripts(
+            driver=args.driver, server=args.server, database=args.database,
+            trusted=args.trusted, username=args.user, password=args.password,
+            rutas_sql=rutas_sql, log=log,
+        )
+    except Exception as e:
+        log(f"ERROR: {e}")
+        _escribir_log(log_path, log_lineas)
+        return 2
+
+    if not args.no_write_config:
+        try:
+            overrides = {
+                "DB_DRIVER": args.driver, "DB_SERVER": args.server,
+                "DB_DATABASE": args.database, "DB_TRUSTED_CONNECTION": args.trusted,
+                "DB_USERNAME": args.user, "DB_PASSWORD": args.password,
+            }
+            _config_path().write_text(config_writer.generar_config_py(config, overrides), encoding="utf-8")
+            log("config.py actualizado con los nuevos datos de conexión.")
+        except Exception as e:
+            log(f"ADVERTENCIA: no se pudo actualizar config.py: {e}")
+
+    log("Setup de base de datos finalizado correctamente.")
+    _escribir_log(log_path, log_lineas)
+    return 0
+
+
+def _cli_reset_admin_password() -> int:
+    """Modo interactivo de consola para restablecer la contraseña de un
+    usuario cuando se perdió el acceso al panel web. Se ejecuta con:
+    rfid_plataforma.exe reset-admin-password"""
+    print("=== Restablecer contraseña — Plataforma RFID ===")
+    ok, mensaje = database.probar_conexion()
+    if not ok:
+        print(f"No se pudo conectar a la base de datos: {mensaje}")
+        print("Revisá config.py (servidor, base de datos, credenciales) y reintentá.")
+        return 1
+
+    try:
+        usuarios = database.listar_usuarios()
+    except Exception as e:
+        print(f"No se pudo obtener la lista de usuarios: {e}")
+        return 1
+
+    if not usuarios:
+        print("No hay usuarios cargados todavía. Usá /setup en el panel web para crear el primer administrador.")
+        return 1
+
+    print("\nUsuarios existentes:")
+    for u in usuarios:
+        estado = "activo" if u["activo"] else "inactivo"
+        print(f"  [{u['usuario_id']}] {u['email']} — {u['nombre']} ({u['rol']}, {estado})")
+
+    email = input("\nEmail del usuario a restablecer: ").strip().lower()
+    fila = database.obtener_usuario_por_email(email)
+    if not fila:
+        print("No existe un usuario con ese email.")
+        return 1
+
+    nueva = getpass.getpass("Nueva contraseña (mín. 6 caracteres): ")
+    confirmar = getpass.getpass("Confirmar contraseña: ")
+    if nueva != confirmar:
+        print("Las contraseñas no coinciden.")
+        return 1
+    if len(nueva) < 6:
+        print("La contraseña debe tener al menos 6 caracteres.")
+        return 1
+
+    database.cambiar_password_usuario(fila[0], generate_password_hash(nueva))
+    print(f"Contraseña de '{email}' actualizada correctamente.")
+    return 0
+
+
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "initdb":
+        sys.exit(_cli_initdb(sys.argv[2:]))
+    if len(sys.argv) > 1 and sys.argv[1] == "reset-admin-password":
+        sys.exit(_cli_reset_admin_password())
+
     iniciar_plataforma()
     logger.info("Panel disponible en http://%s:%s", config.WEB_HOST, config.WEB_PORT)
     socketio.run(app, host=config.WEB_HOST, port=config.WEB_PORT, allow_unsafe_werkzeug=True)

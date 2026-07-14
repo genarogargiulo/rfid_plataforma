@@ -275,6 +275,7 @@ h4.sub { font-size: .95rem; font-weight: 600; margin: 1.2rem 0 .4rem; color: var
     <a class="sidebar-link" data-section="api-antenas">Antenas</a>
     <a class="sidebar-link" data-section="api-config">Configuración</a>
     <a class="sidebar-link" data-section="api-informes">Informes</a>
+    <a class="sidebar-link" data-section="api-usuarios">Usuarios</a>
     <a class="sidebar-link" data-section="api-sistema">Sistema</a>
   </div>
 
@@ -290,8 +291,10 @@ h4.sub { font-size: .95rem; font-weight: 600; margin: 1.2rem 0 .4rem; color: var
     <a class="sidebar-link" data-section="ops-threads">Hilos del sistema</a>
     <a class="sidebar-link" data-section="ops-buffer">Buffer de lecturas</a>
     <a class="sidebar-link" data-section="ops-llrp">Protocolo LLRP</a>
+    <a class="sidebar-link" data-section="ops-password-reset">Restablecer contraseña</a>
     <a class="sidebar-link" data-section="ops-troubleshoot">Troubleshooting</a>
     <a class="sidebar-link" data-section="ops-diag">Scripts de diagnóstico</a>
+    <a class="sidebar-link" data-section="ops-installer">Generar el instalador</a>
   </div>
 
 </nav>
@@ -385,14 +388,18 @@ pyodbc==5.3.0</code></pre>
   <pre><code>-- En SQL Server Management Studio (SSMS):
 CREATE DATABASE RFID_FPT;
 
--- Luego ejecutar sql/schema.sql contra esa base</code></pre>
+-- Luego, contra esa base, ejecutar en este orden:
+--   1. sql/schema.sql             (Readers, Antenas, LecturasRFID, vistas)
+--   2. sql/usuarios_y_logs.sql    (Usuarios, LogActividad)</code></pre>
 
   <h2 class="sub">4. Configurar conexión</h2>
   <p>Editar <code>app/core/config.py</code>:</p>
   <pre><code>DB_DRIVER  = "ODBC Driver 17 for SQL Server"
 DB_SERVER  = "localhost\\SQLEXPRESS"   # o "GEN01\\SQL"
 DB_DATABASE = "RFID_FPT"
-DB_TRUSTED_CONNECTION = True           # Windows Auth</code></pre>
+DB_TRUSTED_CONNECTION = False          # SQL Auth (recomendado)
+DB_USERNAME = "sa"
+DB_PASSWORD = "..."</code></pre>
 
   <h2 class="sub">5. Verificar conexión</h2>
   <pre><code>cd app
@@ -400,7 +407,11 @@ python diagnostico_sql.py</code></pre>
 
   <h2 class="sub">6. Arrancar la plataforma</h2>
   <pre><code>python app.py</code></pre>
-  <p>Abrir <strong>http://localhost:5000</strong> → Configuración → agregar el primer reader y sus antenas. La conexión LLRP al reader se establece automáticamente en segundos.</p>
+  <p>Abrir <strong>http://localhost:5000</strong> → se te pide crear el primer usuario (queda como <code>admin</code> automáticamente) → Configuración → agregar el primer reader y sus antenas. La conexión LLRP al reader se establece automáticamente en segundos.</p>
+
+  <div class="callout callout-info">
+    <strong>Instalación en un cliente</strong> Para desplegar en una máquina Windows sin Python instalado, no se usan estos pasos manuales — se usa el instalador (<code>FPT_RFID_Plataforma_Setup.exe</code>), que además puede crear la base de datos automáticamente. Ver <a style="cursor:pointer" onclick="showSection('ops-installer')">Generar el instalador</a>.
+  </div>
 
   <div class="callout callout-info">
     <strong>Nota</strong> La documentación técnica está disponible en <code>http://localhost:5000/docs</code> (esta misma página). No existe enlace desde ninguna otra pantalla de la aplicación.
@@ -660,7 +671,7 @@ ORDER BY Hora;</code></pre>
       <tr><td>DB_DRIVER</td><td>str</td><td>"ODBC Driver 17…"</td><td>Nombre exacto del driver ODBC instalado</td></tr>
       <tr><td>DB_SERVER</td><td>str</td><td>"localhost"</td><td>Servidor SQL en formato <code>HOST</code> o <code>HOST\INSTANCIA</code></td></tr>
       <tr><td>DB_DATABASE</td><td>str</td><td>"RFID_FPT"</td><td>Nombre de la base de datos</td></tr>
-      <tr><td>DB_TRUSTED_CONNECTION</td><td>bool</td><td>True</td><td>True = Windows Auth; False = SQL Auth</td></tr>
+      <tr><td>DB_TRUSTED_CONNECTION</td><td>bool</td><td>False</td><td>True = Windows Auth; False = SQL Auth. Se recomienda False: el servicio de Windows corre con una cuenta (LocalSystem) que normalmente no tiene acceso a SQL Server</td></tr>
       <tr><td>DB_USERNAME</td><td>str</td><td>""</td><td>Solo para SQL Auth</td></tr>
       <tr><td>DB_PASSWORD</td><td>str</td><td>""</td><td>Solo para SQL Auth</td></tr>
       <tr><td>DB_ENCRYPT</td><td>bool</td><td>False</td><td>Cifrado TLS de la conexión</td></tr>
@@ -969,6 +980,61 @@ ORDER BY Hora;</code></pre>
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- API USUARIOS -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-api-usuarios">
+  <span class="section-badge badge-api">API REST</span>
+  <h1 class="section-title">API — Usuarios</h1>
+  <p class="section-lead">Gestión de cuentas de acceso al panel. Todos los endpoints de administración requieren rol <code>admin</code> (decorador <code>@admin_required</code>); las rutas de login/logout son públicas.</p>
+
+  <h2 class="sub">Roles</h2>
+  <table class="doc-table">
+    <thead><tr><th>Rol</th><th>Acceso</th></tr></thead>
+    <tbody>
+      <tr><td>admin</td><td>Acceso total: panel en vivo, informes, alta/baja/edición de readers y antenas, pestaña Sistema (config.py), y gestión de usuarios (página <code>/usuarios</code>).</td></tr>
+      <tr><td>usuario</td><td>Solo lectura: panel en vivo e informes. No ve la página de Configuración ni Usuarios.</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="sub">Alta del primer usuario</h2>
+  <div class="endpoint"><span class="method get">GET</span> / <span class="method post">POST</span> /setup</div>
+  <p>Solo accesible mientras no exista ningún usuario en <code>dbo.Usuarios</code> (<code>database.contar_usuarios() == 0</code>). El primer usuario creado queda automáticamente con rol <code>admin</code>. Una vez que existe al menos un usuario, esta ruta redirige a <code>/login</code>.</p>
+
+  <h2 class="sub">Login / Logout</h2>
+  <div class="endpoint"><span class="method get">GET</span> / <span class="method post">POST</span> /login</div>
+  <p>Autenticación con email + contraseña (hash <code>werkzeug.security</code>, scrypt/pbkdf2). La sesión queda marcada como permanente (<code>remember=True</code>), con duración de <code>PERMANENT_SESSION_LIFETIME</code> (10 años — pensado para un panel operativo que queda logueado en una pantalla fija de planta). Cada intento, exitoso o fallido, se registra en <code>dbo.LogActividad</code>.</p>
+  <div class="endpoint"><span class="method get">GET</span>/logout</div>
+
+  <h2 class="sub">Listar usuarios</h2>
+  <div class="endpoint"><span class="method get">GET</span>/api/usuarios</div>
+  <p>Devuelve todos los usuarios (activos e inactivos), ordenados por fecha de creación. Usado por la página <code>/usuarios</code>.</p>
+
+  <h2 class="sub">Crear usuario</h2>
+  <div class="endpoint"><span class="method post">POST</span>/api/usuarios</div>
+  <table class="doc-table">
+    <thead><tr><th>Campo</th><th>Tipo</th><th>Requerido</th><th>Descripción</th></tr></thead>
+    <tbody>
+      <tr><td>email</td><td>string</td><td>✓</td><td>Único — se normaliza a minúsculas</td></tr>
+      <tr><td>nombre</td><td>string</td><td>✓</td><td>Nombre visible</td></tr>
+      <tr><td>password</td><td>string</td><td>✓</td><td>Mínimo 6 caracteres</td></tr>
+      <tr><td>rol</td><td>"admin" | "usuario"</td><td>—</td><td>Default "usuario"</td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="sub">Actualizar usuario</h2>
+  <div class="endpoint"><span class="method put">PUT</span>/api/usuarios/{usuario_id}</div>
+  <p>Actualiza nombre, email, rol y estado activo. Tiene dos protecciones para no dejar el sistema sin administrador:</p>
+  <ul>
+    <li>Un admin no puede quitarse a sí mismo el rol <code>admin</code> ni desactivar su propia cuenta.</li>
+    <li>No se puede quitar el rol <code>admin</code> o desactivar al <strong>último</strong> administrador activo (<code>database.contar_admins() &lt;= 1</code>).</li>
+  </ul>
+
+  <h2 class="sub">Cambiar contraseña (desde el panel)</h2>
+  <div class="endpoint"><span class="method put">PUT</span>/api/usuarios/{usuario_id}/password</div>
+  <p>Requiere estar logueado como <code>admin</code>. Sirve para que un administrador le cambie la contraseña a cualquier usuario, incluido otro admin. <strong>No sirve si nadie puede loguearse</strong> — para ese caso ver <a style="cursor:pointer" onclick="showSection('ops-password-reset')">Restablecer contraseña de administrador</a>, que funciona por línea de comandos sin necesidad de sesión web.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- API SISTEMA -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <section class="section" id="section-api-sistema">
@@ -1137,6 +1203,49 @@ reconnect = False               # el reintento lo maneja iniciar_en_hilo()</code
 </section>
 
 <!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- PASSWORD RESET -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-ops-password-reset">
+  <span class="section-badge badge-ops">Operación</span>
+  <h1 class="section-title">Restablecer contraseña de administrador</h1>
+  <p class="section-lead">Qué hacer cuando nadie puede loguearse al panel (contraseña de admin olvidada, o el único admin quedó inutilizable).</p>
+
+  <h2 class="sub">Si todavía hay un admin que puede loguearse</h2>
+  <p>No hace falta nada especial: desde <code>/usuarios</code>, el administrador edita el usuario en cuestión y le asigna una contraseña nueva (endpoint <code>PUT /api/usuarios/{id}/password</code>, ver <a style="cursor:pointer" onclick="showSection('api-usuarios')">API — Usuarios</a>).</p>
+
+  <h2 class="sub">Si nadie puede loguearse</h2>
+  <p>Para este caso existe un comando de restablecimiento que se conecta <strong>directamente a la base de datos</strong>, sin pasar por el panel web ni requerir sesión iniciada. Corre en el mismo ejecutable de la plataforma, en un modo especial de consola.</p>
+
+  <div class="toc-inline">
+    <h4>Formas de ejecutarlo (instalación con el instalador Windows)</h4>
+    <ol>
+      <li>Menú Inicio → carpeta <strong>FPT RFID Plataforma</strong> → <strong>Resetear contraseña de administrador</strong>, o</li>
+      <li>Doble click en <code>resetear_password.bat</code>, dentro de la carpeta de instalación (ej. <code>C:\Program Files\PLATAFORMA_RFID</code>), o</li>
+      <li>Desde una consola, parado en la carpeta de instalación: <code>rfid_plataforma.exe reset-admin-password</code></li>
+    </ol>
+  </div>
+
+  <p>En entorno de desarrollo (código fuente, sin compilar): <code>cd app &amp;&amp; python app.py reset-admin-password</code></p>
+
+  <h2 class="sub">Qué hace</h2>
+  <ol>
+    <li>Se conecta a SQL Server usando los datos de <code>config.py</code>. Si la conexión falla, avisa el motivo y corta — revisar servidor/BD/credenciales antes de reintentar.</li>
+    <li>Lista todos los usuarios existentes (email, nombre, rol, activo/inactivo) para elegir cuál restablecer.</li>
+    <li>Pide el email del usuario a modificar.</li>
+    <li>Pide la contraseña nueva dos veces (no se muestra en pantalla mientras se tipea). Mínimo 6 caracteres.</li>
+    <li>Guarda el nuevo hash en <code>dbo.Usuarios</code> con la misma función que usa el panel web (<code>database.cambiar_password_usuario</code>).</li>
+  </ol>
+
+  <div class="callout callout-info">
+    <strong>Funciona con la app corriendo como servicio</strong> Este comando abre su propia conexión a la base de datos; no necesita detener el servicio de Windows ni interfiere con él. Se puede ejecutar en cualquier momento.
+  </div>
+
+  <div class="callout callout-warn">
+    <strong>No hay recuperación por email</strong> La plataforma no tiene servidor de correo configurado (es una app on-premise sin salida a internet garantizada), por lo que no existe un flujo de "olvidé mi contraseña" vía email. El comando de consola es el mecanismo de recuperación soportado.
+  </div>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
 <!-- TROUBLESHOOTING -->
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 <section class="section" id="section-ops-troubleshoot">
@@ -1197,6 +1306,71 @@ python diagnostico_sql.py</code></pre>
   <pre><code>cd app
 python diagnostico_llrp.py</code></pre>
   <p>Editar <code>READER_IP</code> y <code>ANTENAS</code> al inicio del archivo. Conecta directamente al reader, arranca inventario, espera 40 segundos e imprime cada tag leído con su antena y RSSI. Al final reporta cuántas lecturas llegaron <em>después</em> del inicio del ROSpec (pre-start vs post-start), para distinguir lecturas reales de residuos de sesiones anteriores.</p>
+</section>
+
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<!-- GENERAR INSTALADOR -->
+<!-- ═══════════════════════════════════════════════════════════════════ -->
+<section class="section" id="section-ops-installer">
+  <span class="section-badge badge-ops">Operación</span>
+  <h1 class="section-title">Generar el instalador</h1>
+  <p class="section-lead">Cómo compilar <code>FPT_RFID_Plataforma_Setup.exe</code> a partir del código fuente. Necesario cada vez que se libera una nueva versión para un cliente.</p>
+
+  <h2 class="sub">Qué hace el instalador resultante</h2>
+  <ul>
+    <li>Instalador autoejecutable (asistente en español) que deja elegir el directorio de instalación (por defecto <code>Program Files\PLATAFORMA_RFID</code>).</li>
+    <li>Wizard de conexión a SQL Server: servidor, autenticación (SQL o Windows), usuario/contraseña y nombre de base de datos. Con esos datos crea la base (si no existe) y ejecuta <code>schema.sql</code> + <code>usuarios_y_logs.sql</code> automáticamente. Si algo falla, avisa y continúa igual la instalación (no queda todo trabado).</li>
+    <li>Registra la app como servicio de Windows (WinSW), con inicio automático y reinicio ante caídas.</li>
+    <li>Accesos directos en el menú Inicio: abrir el panel, resetear contraseña de admin, carpeta de instalación, desinstalar.</li>
+  </ul>
+
+  <h2 class="sub">1. Prerequisitos (en la máquina donde se compila)</h2>
+  <table class="doc-table">
+    <thead><tr><th>Herramienta</th><th>Uso</th><th>Cómo conseguirla</th></tr></thead>
+    <tbody>
+      <tr><td>Python 3.9+ con las dependencias de <code>requirements.txt</code></td><td>Empaquetar la app</td><td><code>pip install -r requirements.txt pyinstaller</code></td></tr>
+      <tr><td>Inno Setup 6.x</td><td>Compilar el instalador (<code>.iss</code> → <code>.exe</code>)</td><td><code>winget install JRSoftware.InnoSetup</code>, o <a href="https://jrsoftware.org/isinfo.php" target="_blank">jrsoftware.org</a></td></tr>
+      <tr><td>WinSW x64 (v3)</td><td>Wrapper que registra la app como servicio Windows</td><td>Descargar <code>WinSW-x64.exe</code> desde <a href="https://github.com/winsw/winsw/releases" target="_blank">github.com/winsw/winsw/releases</a></td></tr>
+    </tbody>
+  </table>
+
+  <h2 class="sub">2. Compilar la aplicación con PyInstaller</h2>
+  <pre><code>cd rfid_plataforma
+pyinstaller rfid_plataforma.spec --noconfirm</code></pre>
+  <p>Genera <code>dist\rfid_plataforma\rfid_plataforma.exe</code> (modo <em>onedir</em>). Después copiar junto al ejecutable los archivos editables que <strong>no</strong> deben quedar dentro de <code>_internal\</code>:</p>
+  <pre><code>copy app\core\config.py     dist\rfid_plataforma\config.py
+mkdir dist\rfid_plataforma\sql
+copy sql\schema.sql             dist\rfid_plataforma\sql\
+copy sql\usuarios_y_logs.sql    dist\rfid_plataforma\sql\
+mkdir dist\rfid_plataforma\logs</code></pre>
+  <p><code>build.bat</code> automatiza estos dos pasos (compilación + copia). Nota: termina con un <code>pause</code>, pensado para uso interactivo — si se lo invoca desde un script/CI hay que correr los comandos de arriba directamente en vez de <code>build.bat</code>.</p>
+
+  <h2 class="sub">3. Colocar WinSW</h2>
+  <p>Renombrar el ejecutable descargado y colocarlo en la carpeta que espera el script de Inno Setup:</p>
+  <pre><code>installer\winsw\WinSW-x64.exe</code></pre>
+  <p>Este archivo no se versiona en el repositorio (ver <code>.gitignore</code>) — hay que descargarlo de nuevo en cada máquina donde se compile el instalador.</p>
+
+  <h2 class="sub">4. Compilar el instalador con Inno Setup</h2>
+  <pre><code>cd installer
+iscc setup.iss</code></pre>
+  <p>(<code>iscc.exe</code> normalmente está en <code>C:\Program Files\Inno Setup 6\ISCC.exe</code> o <code>...\Inno Setup 7\ISCC.exe</code> — agregarlo al PATH o invocar con la ruta completa.)</p>
+  <p>Resultado: <code>dist_installer\FPT_RFID_Plataforma_v{version}_Setup.exe</code>. La versión y el nombre de la app se definen al inicio de <code>setup.iss</code> (<code>MyAppVersion</code>, <code>MyAppName</code>).</p>
+
+  <div class="callout callout-warn">
+    <strong>El antivirus puede bloquear WinSW</strong> Es un falso positivo frecuente: WinSW es un wrapper genérico de servicios y varios antivirus lo marcan heurísticamente. Si el instalador reporta que el servicio no pudo instalarse, revisar primero <code>logs\service_install.log</code> en la carpeta de instalación del cliente, y agregar una exclusión de antivirus para esa carpeta.
+  </div>
+
+  <h2 class="sub">Estructura relevante en installer/</h2>
+  <pre><code>installer/
+├── setup.iss                  # Script de Inno Setup (wizard, [Code], [Files]...)
+├── service_install.bat        # Registra e inicia el servicio WinSW — logea a logs\service_install.log
+├── service_uninstall.bat      # Detiene y desregistra el servicio (llamado al desinstalar)
+├── resetear_password.bat      # Atajo a "rfid_plataforma.exe reset-admin-password"
+├── rfid_plataforma_svc.xml    # Configuración de WinSW (nombre del servicio, rutas de log, reintentos)
+└── winsw/
+    └── WinSW-x64.exe          # No versionado — descargar en cada compilación</code></pre>
+
+  <p>El comando <code>rfid_plataforma.exe initdb --server ... --database ... [--trusted | --user ... --password ...]</code> que usa el wizard de base de datos también se puede correr a mano para reintentar el setup de BD después de instalar (ver <code>app.py</code>, función <code>_cli_initdb</code>). Queda registrado en <code>logs\db_init.log</code>.</p>
 </section>
 
 </main><!-- /main -->

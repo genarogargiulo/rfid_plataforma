@@ -4,70 +4,81 @@
 ::  usando WinSW (Windows Service Wrapper).
 ::
 ::  Argumentos:
-::    %1  Directorio de instalación  (ej: "C:\Program Files\FPT RFID Plataforma")
-::    %2  Nombre del servicio (no usado directamente, definido en el XML)
+::    %1  Directorio de instalación  (ej: "C:\PLATAFORMA_RFID")
 ::
 ::  Uso manual (como Administrador):
-::    service_install.bat "C:\FPT_RFID"
+::    service_install.bat "C:\PLATAFORMA_RFID"
+::
+::  Todo el detalle de la ejecución queda registrado en:
+::    <directorio de instalación>\logs\service_install.log
 :: ═════════════════════════════════════════════════════════════════════════
 setlocal EnableDelayedExpansion
 
 set "INSTALL_DIR=%~1"
 if "%INSTALL_DIR%"=="" set "INSTALL_DIR=%~dp0"
-
-:: Eliminar barra final si la hubiera
 if "%INSTALL_DIR:~-1%"=="\" set "INSTALL_DIR=%INSTALL_DIR:~0,-1%"
 
+if not exist "%INSTALL_DIR%\logs" mkdir "%INSTALL_DIR%\logs" >nul 2>&1
+set "LOG=%INSTALL_DIR%\logs\service_install.log"
+
+call :log "============================================================"
+call :log "[%DATE% %TIME%] service_install.bat iniciado"
+call :log "Directorio de instalacion: %INSTALL_DIR%"
+
 set "WINSW=%INSTALL_DIR%\rfid_plataforma_svc.exe"
+call :log "Ejecutable WinSW: %WINSW%"
 
-echo.
-echo [service_install] Directorio : %INSTALL_DIR%
-echo [service_install] WinSW      : %WINSW%
-echo.
-
-:: Verificar que WinSW existe
+:: Verificar que WinSW existe (si el antivirus lo bloqueo/elimino, se detecta aca)
 if not exist "%WINSW%" (
-    echo [ERROR] No se encontro rfid_plataforma_svc.exe en: %INSTALL_DIR%
+    call :log "[ERROR] No se encontro rfid_plataforma_svc.exe en: %INSTALL_DIR%"
+    call :log "        Causa probable: el antivirus lo elimino o bloqueo al extraerlo."
+    call :log "        Solucion: agregar una exclusion de antivirus para la carpeta"
+    call :log "        de instalacion y volver a ejecutar este script como administrador."
     exit /b 1
 )
 
 :: Verificar que el ejecutable de la app existe
 if not exist "%INSTALL_DIR%\rfid_plataforma.exe" (
-    echo [ERROR] No se encontro rfid_plataforma.exe en: %INSTALL_DIR%
+    call :log "[ERROR] No se encontro rfid_plataforma.exe en: %INSTALL_DIR%"
     exit /b 1
 )
 
-:: Crear directorio de logs
-if not exist "%INSTALL_DIR%\logs" mkdir "%INSTALL_DIR%\logs"
-
 :: Desinstalar servicio anterior si existía (actualización in-place)
-"%WINSW%" status >nul 2>&1
+"%WINSW%" status >>"%LOG%" 2>&1
 if not errorlevel 1 (
-    echo [INFO] Servicio existente encontrado. Deteniendolo...
-    "%WINSW%" stop >nul 2>&1
+    call :log "[INFO] Servicio existente encontrado. Deteniendolo..."
+    "%WINSW%" stop >>"%LOG%" 2>&1
     timeout /t 5 /nobreak >nul
-    echo [INFO] Desinstalando version anterior...
-    "%WINSW%" uninstall
+    call :log "[INFO] Desinstalando version anterior..."
+    "%WINSW%" uninstall >>"%LOG%" 2>&1
 )
 
 :: Instalar el servicio
-echo [INFO] Instalando servicio Windows...
-"%WINSW%" install
+call :log "[INFO] Instalando servicio Windows..."
+"%WINSW%" install >>"%LOG%" 2>&1
 if errorlevel 1 (
-    echo [ERROR] No se pudo instalar el servicio.
+    call :log "[ERROR] No se pudo instalar el servicio (codigo %ERRORLEVEL%)."
+    call :log "        Revisar permisos de administrador y que el antivirus no"
+    call :log "        haya bloqueado rfid_plataforma_svc.exe."
     exit /b 1
 )
+call :log "[OK] Servicio registrado."
 
 :: Iniciar el servicio
-echo [INFO] Iniciando servicio...
-"%WINSW%" start
+call :log "[INFO] Iniciando servicio..."
+"%WINSW%" start >>"%LOG%" 2>&1
 if errorlevel 1 (
-    echo [ADVERTENCIA] El servicio fue instalado pero no pudo iniciarse ahora.
-    echo               Verificar config.py con la conexion a SQL Server e iniciar
-    echo               manualmente: rfid_plataforma_svc.exe start
+    call :log "[ADVERTENCIA] El servicio fue instalado pero no pudo iniciarse ahora."
+    call :log "              Verificar config.py con la conexion a SQL Server e iniciar"
+    call :log "              manualmente: rfid_plataforma_svc.exe start"
 ) else (
-    echo [OK] Servicio iniciado. Panel disponible en http://localhost:5000
+    call :log "[OK] Servicio iniciado. Panel disponible en http://localhost:5000"
 )
 
-echo.
+call :log "[%DATE% %TIME%] service_install.bat finalizado (exito)"
+exit /b 0
+
+:log
+echo %~1
+echo %~1>>"%LOG%"
 exit /b 0

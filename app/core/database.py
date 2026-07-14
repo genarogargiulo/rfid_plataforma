@@ -10,10 +10,12 @@ Requiere también el driver ODBC de SQL Server instalado en el sistema
 """
 
 import logging
+import re
 import threading
 import time
 from collections import deque
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional
 
 import pyodbc
@@ -22,28 +24,47 @@ import config
 
 logger = logging.getLogger("database")
 
+# Nombre de BD/instancia: solo letras, números, guión bajo y backslash (instancia).
+_RE_IDENTIFICADOR_SEGURO = re.compile(r"^[A-Za-z0-9_\\]+$")
 
-def construir_connection_string() -> str:
-    """Arma el connection string ODBC a partir de config.py."""
+
+def construir_connection_string(
+    driver: str = None, server: str = None, database: str = None,
+    trusted: bool = None, username: str = None, password: str = None,
+    encrypt: bool = None, trust_server_certificate: bool = None,
+) -> str:
+    """Arma el connection string ODBC. Sin argumentos, usa config.py."""
+    driver = config.DB_DRIVER if driver is None else driver
+    server = config.DB_SERVER if server is None else server
+    database = config.DB_DATABASE if database is None else database
+    trusted = config.DB_TRUSTED_CONNECTION if trusted is None else trusted
+    username = config.DB_USERNAME if username is None else username
+    password = config.DB_PASSWORD if password is None else password
+    encrypt = config.DB_ENCRYPT if encrypt is None else encrypt
+    trust_server_certificate = (
+        config.DB_TRUST_SERVER_CERTIFICATE if trust_server_certificate is None
+        else trust_server_certificate
+    )
+
     partes = [
-        f"DRIVER={{{config.DB_DRIVER}}}",
-        f"SERVER={config.DB_SERVER}",
-        f"DATABASE={config.DB_DATABASE}",
+        f"DRIVER={{{driver}}}",
+        f"SERVER={server}",
+        f"DATABASE={database}",
     ]
-    if config.DB_TRUSTED_CONNECTION:
+    if trusted:
         partes.append("Trusted_Connection=yes")
     else:
-        partes.append(f"UID={config.DB_USERNAME}")
-        partes.append(f"PWD={config.DB_PASSWORD}")
-    if config.DB_ENCRYPT is not None:
-        partes.append(f"Encrypt={'yes' if config.DB_ENCRYPT else 'no'}")
-    if config.DB_TRUST_SERVER_CERTIFICATE:
+        partes.append(f"UID={username}")
+        partes.append(f"PWD={password}")
+    if encrypt is not None:
+        partes.append(f"Encrypt={'yes' if encrypt else 'no'}")
+    if trust_server_certificate:
         partes.append("TrustServerCertificate=yes")
     return ";".join(partes) + ";"
 
 
 def obtener_conexion() -> pyodbc.Connection:
-    """Abre una nueva conexión a SQL Server. Lanza excepción si falla."""
+    """Abre una nueva conexión a SQL Server usando config.py. Lanza excepción si falla."""
     cs = construir_connection_string()
     return pyodbc.connect(cs, timeout=10)
 
@@ -484,3 +505,108 @@ def registrar_actividad(
         conn.close()
     except Exception:
         logger.exception("No se pudo registrar actividad en BD")
+
+
+# ── Setup inicial de base de datos (usado por el instalador) ─────────────────
+
+# Fragmentos de mensaje de error de SQL Server que indican que el objeto
+# (tabla/vista/índice) ya existe. Se toleran para que volver a correr el
+# setup contra una BD ya inicializada no falle.
+_ERRORES_OBJETO_YA_EXISTE = (
+    "There is already an object named",
+    "already an index named",
+    "already exists",
+)
+
+
+def _identificador_seguro(valor: str) -> bool:
+    return bool(_RE_IDENTIFICADOR_SEGURO.match(valor or ""))
+
+
+def crear_base_datos_si_no_existe(
+    driver: str, server: str, database: str,
+    trusted: bool, username: str, password: str,
+) -> None:
+    """Se conecta a 'master' en el server dado y crea la BD si no existe.
+    Lanza excepción si la conexión o la creación fallan."""
+    if not _identificador_seguro(database):
+        raise ValueError(f"Nombre de base de datos inválido: {database!r}")
+
+    cs = construir_connection_string(
+        driver=driver, server=server, database="master",
+        trusted=trusted, username=username, password=password,
+    )
+    conn = pyodbc.connect(cs, timeout=10, autocommit=True)
+    try:
+        cur = conn.cursor()
+        cur.execute(f"IF DB_ID(N'{database}') IS NULL CREATE DATABASE [{database}]")
+    finally:
+        conn.close()
+
+
+def dividir_batches_sql(contenido: str) -> list:
+    """Divide un script .sql en batches separados por líneas 'GO' (estilo sqlcmd/SSMS)."""
+    batches = []
+    actual = []
+    for linea in contenido.splitlines():
+        if re.match(r"^\s*GO\s*$", linea, re.IGNORECASE):
+            if actual:
+                batches.append("\n".join(actual))
+                actual = []
+        else:
+            actual.append(linea)
+    if actual:
+        batches.append("\n".join(actual))
+    return [b for b in batches if b.strip()]
+
+
+def ejecutar_script_sql(conn: pyodbc.Connection, ruta: Path, log=None) -> None:
+    """Ejecuta un archivo .sql batch por batch. Tolera errores de 'objeto ya
+    existe' (permite re-ejecutar contra una BD ya inicializada); cualquier
+    otro error se relanza."""
+    log = log or (lambda *a: None)
+    contenido = ruta.read_text(encoding="utf-8-sig")
+    batches = dividir_batches_sql(contenido)
+    cur = conn.cursor()
+    for i, batch in enumerate(batches, start=1):
+        if not batch.strip():
+            continue
+        try:
+            cur.execute(batch)
+            conn.commit()
+        except pyodbc.Error as e:
+            mensaje = str(e)
+            if any(marcador in mensaje for marcador in _ERRORES_OBJETO_YA_EXISTE):
+                log(f"  [{ruta.name}] batch {i}: objeto ya existe, se omite.")
+                conn.rollback()
+                continue
+            log(f"  [{ruta.name}] batch {i}: ERROR — {mensaje}")
+            raise
+
+
+def setup_base_datos_desde_scripts(
+    driver: str, server: str, database: str,
+    trusted: bool, username: str, password: str,
+    rutas_sql: list, log=None,
+) -> None:
+    """Orquesta el setup completo: crea la BD si no existe y ejecuta los
+    scripts SQL en orden. Lanza excepción con mensaje descriptivo si algo
+    falla (conexión, permisos, o error real de SQL no tolerado)."""
+    log = log or (lambda *a: None)
+
+    log(f"Conectando a '{server}' (master) para verificar/crear base de datos '{database}'...")
+    crear_base_datos_si_no_existe(driver, server, database, trusted, username, password)
+    log(f"Base de datos '{database}' verificada/creada.")
+
+    cs = construir_connection_string(
+        driver=driver, server=server, database=database,
+        trusted=trusted, username=username, password=password,
+    )
+    conn = pyodbc.connect(cs, timeout=10)
+    try:
+        for ruta in rutas_sql:
+            log(f"Ejecutando script: {ruta.name}...")
+            ejecutar_script_sql(conn, ruta, log=log)
+            log(f"Script {ruta.name} completado.")
+    finally:
+        conn.close()

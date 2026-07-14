@@ -1,0 +1,15 @@
+# Build artifacts (PyInstaller)
+build/
+dist/
+
+# Instalador compilado
+dist_installer/
+
+# Binario de WinSW (se descarga aparte, no se versiona)
+installer/winsw/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
